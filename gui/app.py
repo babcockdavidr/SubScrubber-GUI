@@ -1,5 +1,5 @@
 """
-SubClean GUI — PyQt6
+SubScrubber GUI — PyQt6
 Dark industrial theme. Diff review workflow: flag → approve/deny per block.
 """
 from __future__ import annotations
@@ -352,7 +352,7 @@ class DropZone(QFrame):
 class MainWindow(QMainWindow):
     def __init__(self, preload: List[Path] = None):
         super().__init__()
-        self.setWindowTitle("SubClean")
+        self.setWindowTitle("SubScrubber")
         self.resize(1200, 750)
         self.setMinimumSize(900, 600)
 
@@ -375,7 +375,7 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(16, 16))
         self.addToolBar(toolbar)
 
-        title = QLabel("SUBCLEAN")
+        title = QLabel("SUBSCRUBBER")
         toolbar.addWidget(title)
 
         toolbar.addSeparator()
@@ -395,6 +395,9 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Ready — drop subtitle files to begin")
+        self._version_label = QLabel("Beta 2")
+        self._version_label.setStyleSheet(f"color: {FG2}; font-size: 11px; padding-right: 6px;")
+        self._status.addPermanentWidget(self._version_label)
 
         # Central layout
         central = QWidget()
@@ -740,8 +743,7 @@ class MainWindow(QMainWindow):
             return
         item = self._block_list.item(row)
         if isinstance(item, BlockRow):
-            item.block.is_ad = True
-            item.block.is_warning = False
+            item.block.regex_matches = 3   # forces is_ad = True (computed property)
             item._update_display()
             self._refresh_stats()
             self._block_list.setCurrentRow(min(row + 1, self._block_list.count() - 1))
@@ -752,8 +754,7 @@ class MainWindow(QMainWindow):
             return
         item = self._block_list.item(row)
         if isinstance(item, BlockRow):
-            item.block.is_ad = False
-            item.block.is_warning = False
+            item.block.regex_matches = -1  # forces is_ad=False, is_warning=False
             item.block.ad_score = 0.0
             item._update_display()
             self._refresh_stats()

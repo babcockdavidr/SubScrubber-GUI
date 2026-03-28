@@ -19,7 +19,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QTextEdit, QProgressBar,
+    QListWidget, QListWidgetItem, QTextEdit, QTextBrowser, QProgressBar,
     QFileDialog, QMessageBox, QCheckBox, QAbstractItemView,
     QSplitter, QSlider, QFrame, QSizePolicy,
 )
@@ -147,7 +147,7 @@ class BatchPanel(QWidget):
         self._lbl_folder.setSizePolicy(QSizePolicy.Policy.Expanding,
                                        QSizePolicy.Policy.Preferred)
 
-        self._btn_folder = QPushButton("📂  Select Movies Folder…")
+        self._btn_folder = QPushButton("📂  Select Base Folder…")
         self._btn_folder.setStyleSheet(
             f"font-size: 13px; font-weight: bold; padding: 8px 18px;"
             f"background: {BG3}; border: 1px solid {ACCENT}; color: {ACCENT};"
@@ -258,9 +258,9 @@ class BatchPanel(QWidget):
         lbl_report = QLabel("BATCH REPORT")
         lbl_report.setObjectName("section_label")
 
-        self._report_text = QTextEdit()
-        self._report_text.setReadOnly(True)
+        self._report_text = QTextBrowser()
         self._report_text.setFont(QFont("Consolas", 11))
+        self._report_text.setOpenExternalLinks(False)
 
         rl.addWidget(lbl_report)
         rl.addWidget(self._report_text)
@@ -289,7 +289,7 @@ class BatchPanel(QWidget):
     # ── Folder selection ──────────────────────────────────────────────────
 
     def _select_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Movies / Shows Folder")
+        folder = QFileDialog.getExistingDirectory(self, "Select Base Folder")
         if not folder:
             return
         self._root_folder = Path(folder)
@@ -389,49 +389,119 @@ class BatchPanel(QWidget):
             self._result_list.addItem(ResultRow(fr, self._threshold))
 
         self._update_summary_counts()
-        self._report_text.setText(self._build_report())
+        self._report_text.setHtml(self._build_report())
 
     def _build_report(self) -> str:
+        """Build a rich HTML summary report for the full batch."""
         if not self._batch_result:
             return ""
         t = self._threshold
-        lines = [
-            f"Batch scan — threshold: regex_matches ≥ {t}",
-            f"{'─'*50}",
-            f"Total files scanned: {self._batch_result.total}",
-            f"Errors:              {len(self._batch_result.errors)}",
-            "",
-        ]
-        flagged = []
-        clean = []
+        flagged, clean, errors = [], [], []
         for r in self._batch_result.results:
             if r.error:
+                errors.append(r)
                 continue
-            if r.subtitle:
-                ads, warns = _classify(r.subtitle, t)
-            else:
-                ads, warns = 0, 0
+            ads, warns = _classify(r.subtitle, t) if r.subtitle else (0, 0)
             if ads > 0 or (warns > 0 and self._chk_warnings.isChecked()):
                 flagged.append((r, ads, warns))
             else:
                 clean.append(r)
 
-        lines.append(f"Files to clean:      {len(flagged)}")
-        lines.append(f"Clean files:         {len(clean)}")
-        lines.append("")
+        def esc(s): 
+            return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+        html = [f"""
+<style>
+  body {{ background:#0f1117; color:#cdd6f4; font-family:Consolas,monospace; font-size:12px; margin:8px; }}
+  .section {{ color:#6c7a96; font-size:10px; letter-spacing:2px; margin-top:14px; margin-bottom:4px; }}
+  .stat-row {{ margin:2px 0; }}
+  .stat-label {{ color:#6c7a96; }}
+  .stat-val {{ color:#cdd6f4; font-weight:bold; }}
+  .file-header {{ margin-top:12px; margin-bottom:3px; padding:4px 8px;
+                  background:#1e2535; border-left:3px solid #f38ba8;
+                  color:#cdd6f4; }}
+  .file-clean {{ border-left-color:#a6e3a1; }}
+  .file-warn  {{ border-left-color:#fab387; }}
+  .block-ad   {{ margin:3px 0 3px 16px; padding:4px 8px;
+                 background:#f38ba822; border-left:2px solid #f38ba8; }}
+  .block-warn {{ margin:3px 0 3px 16px; padding:4px 8px;
+                 background:#fab38722; border-left:2px solid #fab387; }}
+  .block-text {{ color:#f38ba8; font-weight:bold; }}
+  .block-text-warn {{ color:#fab387; font-weight:bold; }}
+  .block-meta {{ color:#6c7a96; font-size:11px; margin-top:2px; }}
+  .block-ts   {{ color:#4e9eff; }}
+  .tag-ad     {{ background:#f38ba833; color:#f38ba8; padding:1px 5px; border-radius:3px; font-size:10px; }}
+  .tag-warn   {{ background:#fab38733; color:#fab387; padding:1px 5px; border-radius:3px; font-size:10px; }}
+  .tag-clean  {{ background:#a6e3a133; color:#a6e3a1; padding:1px 5px; border-radius:3px; font-size:10px; }}
+  .reason-tag {{ background:#2a3347; color:#6c7a96; padding:1px 4px; border-radius:3px;
+                 font-size:10px; margin-right:3px; }}
+</style>
+<div class="section">BATCH SUMMARY</div>
+<div class="stat-row"><span class="stat-label">Threshold: </span>
+  <span class="stat-val">regex_matches ≥ {t}</span></div>
+<div class="stat-row"><span class="stat-label">Files scanned: </span>
+  <span class="stat-val">{self._batch_result.total}</span></div>
+<div class="stat-row"><span class="stat-label">Files to clean: </span>
+  <span class="stat-val" style="color:#f38ba8">{len(flagged)}</span></div>
+<div class="stat-row"><span class="stat-label">Clean files: </span>
+  <span class="stat-val" style="color:#a6e3a1">{len(clean)}</span></div>
+<div class="stat-row"><span class="stat-label">Errors: </span>
+  <span class="stat-val">{len(errors)}</span></div>
+"""]
 
         if flagged:
-            lines.append("── Files with issues ──────────────────────────────")
+            html.append('<div class="section">FILES WITH ADS / WARNINGS</div>')
             for r, ads, warns in flagged:
-                lines.append(f"  [{ads:>2} ads, {warns:>2} warns]  {r.path}")
+                ad_tag = f'<span class="tag-ad">{ads} ads</span>' if ads else ''
+                wn_tag = f'<span class="tag-warn">{warns} warns</span>' if warns else ''
+                html.append(f'<div class="file-header">'
+                            f'&nbsp;{ad_tag} {wn_tag}&nbsp;&nbsp;'
+                            f'<span style="color:#cdd6f4">{esc(r.path.parent.name)}/</span>'
+                            f'<span style="color:#fff;font-weight:bold">{esc(r.path.name)}</span>'
+                            f'</div>')
                 if r.subtitle:
                     for b in r.subtitle.blocks:
                         if b.regex_matches >= t:
-                            reasons = ", ".join(dict.fromkeys(b.hints))
-                            lines.append(f"    [{b.start}]  {b.text[:60]}")
-                            if reasons:
-                                lines.append(f"             {reasons}")
-        return "\n".join(lines)
+                            reasons_html = " ".join(
+                                f'<span class="reason-tag">{esc(h)}</span>'
+                                for h in dict.fromkeys(b.hints)
+                            )
+                            html.append(
+                                f'<div class="block-ad">'
+                                f'<span class="tag-ad">AD</span>&nbsp;'
+                                f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
+                                f'<span class="block-text">{esc(b.text[:80])}</span>'
+                                f'<div class="block-meta">{reasons_html}</div>'
+                                f'</div>'
+                            )
+                        elif b.regex_matches == t - 1 and t > 1:
+                            reasons_html = " ".join(
+                                f'<span class="reason-tag">{esc(h)}</span>'
+                                for h in dict.fromkeys(b.hints)
+                            )
+                            html.append(
+                                f'<div class="block-warn">'
+                                f'<span class="tag-warn">WARN</span>&nbsp;'
+                                f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
+                                f'<span class="block-text-warn">{esc(b.text[:80])}</span>'
+                                f'<div class="block-meta">{reasons_html}</div>'
+                                f'</div>'
+                            )
+
+        if errors:
+            html.append('<div class="section">ERRORS</div>')
+            for r in errors:
+                html.append(f'<div style="color:#888;margin:2px 0">'
+                            f'✕ {esc(r.path.name)} — {esc(r.error)}</div>')
+
+        if clean:
+            html.append('<div class="section">CLEAN FILES</div>')
+            for r in clean:
+                html.append(f'<div style="color:#6c7a96;margin:1px 0">'
+                            f'<span class="tag-clean">✓</span>&nbsp;'
+                            f'{esc(r.path.parent.name)}/{esc(r.path.name)}</div>')
+
+        return "\n".join(html)
 
     # ── Detail on row click ───────────────────────────────────────────────
 
@@ -443,31 +513,84 @@ class BatchPanel(QWidget):
         self._btn_open_in_review.setEnabled(fr.ok)
 
         if not fr.subtitle:
-            self._report_text.setText(f"Error: {fr.error}" if fr.error else "No data.")
+            msg = f"Error: {fr.error}" if fr.error else "No data."
+            self._report_text.setHtml(f"<p style='color:#888;font-family:Consolas'>{msg}</p>")
             return
+
+        def esc(s):
+            return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
         t = self._threshold
         ads, warns = _classify(fr.subtitle, t)
-        lines = [
-            f"File: {fr.path}",
-            f"Threshold: regex_matches ≥ {t}",
-            f"Blocks: {len(fr.subtitle.blocks)} total  |  {ads} ads  |  {warns} warnings",
-            "",
-        ]
+
+        html = [f"""<style>
+  body {{ background:#0f1117; color:#cdd6f4; font-family:Consolas,monospace;
+          font-size:12px; margin:8px; }}
+  .file-path {{ color:#6c7a96; font-size:11px; word-break:break-all; }}
+  .file-name {{ color:#fff; font-weight:bold; font-size:13px; }}
+  .summary   {{ margin:6px 0 10px 0; color:#6c7a96; }}
+  .block-ad  {{ margin:4px 0; padding:5px 10px; background:#f38ba822;
+                border-left:3px solid #f38ba8; }}
+  .block-warn{{ margin:4px 0; padding:5px 10px; background:#fab38722;
+                border-left:3px solid #fab387; }}
+  .tag-ad    {{ background:#f38ba833; color:#f38ba8; padding:1px 5px;
+                border-radius:3px; font-size:10px; }}
+  .tag-warn  {{ background:#fab38733; color:#fab387; padding:1px 5px;
+                border-radius:3px; font-size:10px; }}
+  .ts        {{ color:#4e9eff; }}
+  .ad-text   {{ color:#f38ba8; font-weight:bold; }}
+  .warn-text {{ color:#fab387; font-weight:bold; }}
+  .rm        {{ color:#6c7a96; font-size:10px; }}
+  .reason    {{ background:#2a3347; color:#6c7a96; padding:1px 4px;
+                border-radius:3px; font-size:10px; margin-right:3px; }}
+  .clean-msg {{ color:#a6e3a1; margin-top:10px; }}
+</style>
+<div class="file-path">{esc(fr.path.parent)}/</div>
+<div class="file-name">{esc(fr.path.name)}</div>
+<div class="summary">
+  Threshold: rm≥{t} &nbsp;|&nbsp;
+  {len(fr.subtitle.blocks)} blocks total &nbsp;|&nbsp;
+  <span style="color:#f38ba8">{ads} ads</span> &nbsp;|&nbsp;
+  <span style="color:#fab387">{warns} warnings</span>
+</div>"""]
+
+        found_any = False
         for b in fr.subtitle.blocks:
             if b.regex_matches >= t:
-                status = "AD  "
+                found_any = True
+                reasons_html = " ".join(
+                    f'<span class="reason">{esc(h)}</span>'
+                    for h in dict.fromkeys(b.hints)
+                )
+                html.append(
+                    f'<div class="block-ad">'
+                    f'<span class="tag-ad">AD</span>&nbsp;'
+                    f'<span class="rm">rm={b.regex_matches}</span>&nbsp;&nbsp;'
+                    f'<span class="ts">[{esc(b.start)}]</span><br>'
+                    f'<span class="ad-text">{esc(b.text[:120])}</span><br>'
+                    f'<span>{reasons_html}</span>'
+                    f'</div>'
+                )
             elif b.regex_matches == t - 1 and t > 1:
-                status = "WARN"
-            else:
-                continue
-            reasons = ", ".join(dict.fromkeys(b.hints))
-            lines.append(f"  [{status}] rm={b.regex_matches:>2}  [{b.start}]  {b.text[:60]}")
-            if reasons:
-                lines.append(f"           {reasons}")
-        if ads == 0 and warns == 0:
-            lines.append("  (no issues at this threshold)")
-        self._report_text.setText("\n".join(lines))
+                found_any = True
+                reasons_html = " ".join(
+                    f'<span class="reason">{esc(h)}</span>'
+                    for h in dict.fromkeys(b.hints)
+                )
+                html.append(
+                    f'<div class="block-warn">'
+                    f'<span class="tag-warn">WARN</span>&nbsp;'
+                    f'<span class="rm">rm={b.regex_matches}</span>&nbsp;&nbsp;'
+                    f'<span class="ts">[{esc(b.start)}]</span><br>'
+                    f'<span class="warn-text">{esc(b.text[:120])}</span><br>'
+                    f'<span>{reasons_html}</span>'
+                    f'</div>'
+                )
+
+        if not found_any:
+            html.append('<div class="clean-msg">✓ No issues found at this threshold.</div>')
+
+        self._report_text.setHtml("\n".join(html))
 
     def _open_in_review(self):
         if not self._batch_result:
