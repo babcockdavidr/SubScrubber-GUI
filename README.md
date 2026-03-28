@@ -1,4 +1,4 @@
-# SubScrubber
+# SubScrubber - GUI
 
 Remove ads, watermarks, and junk from subtitle files.
 
