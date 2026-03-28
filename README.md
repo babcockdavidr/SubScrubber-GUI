@@ -74,9 +74,9 @@ For cleaning an entire media library in one pass, including libraries where each
 5. Use the **Sensitivity slider** (1–5) to control how aggressively blocks are flagged. Moving it instantly re-colours all rows without rescanning:
    - **1 — Very Aggressive**: catches almost everything, higher false-positive risk
    - **2 — Aggressive**: catches most ad patterns plus borderline cases
-   - **3 — Balanced** *(default)*: matches subcleaner's original behaviour
+   - **3 — Balanced** *(default)*: matches subcleaner's original behaviour. This option is **NOT** recommended, as it typically deletes false positives.
    - **4 — Conservative**: only removes blocks with multiple strong matches
-   - **5 — Very Conservative**: only the most obvious, unambiguous ads
+   - **5 — Very Conservative**: only the most obvious, unambiguous ads. **RECOMMENDED**
 6. Optionally check **Also remove warnings** to include blocks one level below the threshold
 7. Click **🗑 Clean & Save All** — a confirmation dialog shows exactly how many blocks from how many files will be removed, then writes everything in one shot
 8. To review a specific file in detail before cleaning, select it and click **Open in Review Tab →**
@@ -100,7 +100,7 @@ Inspects subtitle tracks embedded directly inside video container files, without
 
 ---
 
-## Installing FFmpeg (required for Video Scan)
+## Installing FFmpeg on Windows 10 and 11 (required for Video Scan)
 
 FFmpeg is a free, open-source tool that SubScrubber uses to probe and extract subtitle tracks from video files. It is only needed for the Video Scan tab — everything else works without it.
 
@@ -111,16 +111,16 @@ Go to **https://ffmpeg.org/download.html**, click **Windows**, then choose the *
 ### Step 2 — Extract it
 
 Extract the ZIP to a permanent location. A good choice is:
-
 ```
-C:fmpeg```
+C:\ffmpeg
+```
 
 After extracting you should have a folder structure like:
 
 ```
-C:fmpeg    bin        ffmpeg.exe
-        ffprobe.exe
-        ffplay.exe
+C:\ffmpeg\bin\ffmpeg.exe
+             \ffprobe.exe
+             \ffplay.exe
 ```
 
 The `bin\` folder is the one that matters.
