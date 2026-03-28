@@ -1,4 +1,4 @@
-# SubScrubber — Beta 2
+# SubScrubber — Beta 3
 
 **Remove ads, watermarks, and distributor junk from subtitle files.**
 
