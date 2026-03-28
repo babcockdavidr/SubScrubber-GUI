@@ -100,6 +100,58 @@ Inspects subtitle tracks embedded directly inside video container files, without
 
 ---
 
+## Installing FFmpeg (required for Video Scan)
+
+FFmpeg is a free, open-source tool that SubScrubber uses to probe and extract subtitle tracks from video files. It is only needed for the Video Scan tab — everything else works without it.
+
+### Step 1 — Download FFmpeg
+
+Go to **https://ffmpeg.org/download.html**, click **Windows**, then choose the **"Windows builds by BtbN"** link. Download the latest `ffmpeg-master-latest-win64-gpl.zip` file.
+
+### Step 2 — Extract it
+
+Extract the ZIP to a permanent location. A good choice is:
+
+```
+C:fmpeg```
+
+After extracting you should have a folder structure like:
+
+```
+C:fmpeg    bin        ffmpeg.exe
+        ffprobe.exe
+        ffplay.exe
+```
+
+The `bin\` folder is the one that matters.
+
+### Step 3 — Add FFmpeg to your PATH
+
+The PATH is the list of folders Windows searches when you run a command. You need to add the `bin\` folder to it so SubScrubber (and any other program) can find `ffmpeg.exe` and `ffprobe.exe`.
+
+1. Press **Windows + S** and search for **"Edit the system environment variables"** — open it
+2. Click **"Environment Variables…"** at the bottom right
+3. In the **"System variables"** section (bottom half), find the variable named **Path** and double-click it
+4. Click **"New"** and paste the full path to your bin folder, e.g.:
+   ```
+   C:\ffmpeg\bin
+   ```
+5. Click **OK** on every dialog to close them all
+
+### Step 4 — Verify it worked
+
+Open a new PowerShell or Command Prompt window (it must be a new window — existing ones won't pick up the change) and run:
+
+```bash
+ffprobe -version
+```
+
+If it prints version information, FFmpeg is on your PATH and SubScrubber's Video Scan tab will work. If you still see "not recognized", double-check the path you entered in Step 3 — it should point to the folder containing `ffmpeg.exe`, not to `ffmpeg.exe` itself.
+
+> **Note:** You must open a new terminal window after editing PATH — any window that was already open before the change will not see the update. Restarting SubScrubber after adding FFmpeg to PATH is also required.
+
+---
+
 ## Regex Editor Tab
 
 A full in-app editor for the regex pattern profiles that drive detection. Changes are saved to disk and applied immediately without restarting.
