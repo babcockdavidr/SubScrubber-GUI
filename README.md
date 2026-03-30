@@ -2,7 +2,7 @@
 
 **Remove ads, watermarks, and distributor junk from subtitle files.**
 
-Supports `.srt` · `.ass` · `.ssa` · `.vtt` · embedded subtitles inside `.mkv` `.mp4` and more
+SubScrubber is the ultimate, cross-platform, GUI-enabled, multi-format subtitle cleaning tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` `.mp4` and more
 
 Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt/subcleaner), extended with multi-format support, a full GUI, batch processing, embedded subtitle scanning, MKVToolNix integration, and an in-app regex profile editor.
 
