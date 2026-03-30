@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from .subtitle import load_subtitle, SUPPORTED_EXTENSIONS
 from .cleaner import analyze
@@ -76,6 +76,7 @@ class SubtitleTrack:
     total_blocks: int = 0
     scan_error: str = ""
     flagged_samples: List[str] = field(default_factory=list)  # up to 5 samples
+    subtitle: Any = None  # ParsedSubtitle — stored for re-thresholding in GUI
 
     @property
     def display_name(self) -> str:
@@ -93,15 +94,35 @@ class SubtitleTrack:
 
     @property
     def status_label(self) -> str:
+        return self.status_at_threshold(3)
+
+    def status_at_threshold(self, threshold: int = 3) -> str:
         if self.scan_error:
             return "ERROR"
         if not self.is_text:
             return "IMAGE" if self.is_image else "SKIP"
-        if self.ad_count > 0:
-            return "ADS"
-        if self.warning_count > 0:
-            return "WARN"
+        if self.subtitle is not None:
+            ads   = sum(1 for b in self.subtitle.blocks if b.regex_matches >= threshold)
+            warns = sum(1 for b in self.subtitle.blocks
+                        if b.regex_matches == threshold - 1 and threshold > 1)
+            if ads > 0:   return "ADS"
+            if warns > 0: return "WARN"
+            return "CLEAN"
+        # Fall back to stored counts (threshold=3 was used at scan time)
+        if self.ad_count > 0:    return "ADS"
+        if self.warning_count > 0: return "WARN"
         return "CLEAN"
+
+    def ads_at_threshold(self, threshold: int = 3) -> int:
+        if self.subtitle is not None:
+            return sum(1 for b in self.subtitle.blocks if b.regex_matches >= threshold)
+        return self.ad_count if threshold <= 3 else 0
+
+    def warnings_at_threshold(self, threshold: int = 3) -> int:
+        if self.subtitle is not None:
+            return sum(1 for b in self.subtitle.blocks
+                       if b.regex_matches == threshold - 1 and threshold > 1)
+        return self.warning_count if threshold == 3 else 0
 
 
 @dataclass
@@ -181,17 +202,19 @@ def probe_video(path: Path) -> Tuple[List[SubtitleTrack], str]:
     ]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(cmd, capture_output=True, timeout=30)
     except subprocess.TimeoutExpired:
         return [], "ffprobe timed out"
     except Exception as e:
         return [], f"ffprobe failed: {e}"
 
     if proc.returncode != 0:
-        return [], f"ffprobe error: {proc.stderr.strip()[:200]}"
+        err = proc.stderr.decode("utf-8", errors="replace").strip()[:200]
+        return [], f"ffprobe error: {err}"
 
     try:
-        data = json.loads(proc.stdout)
+        stdout = proc.stdout.decode("utf-8", errors="replace")
+        data = json.loads(stdout)
     except json.JSONDecodeError as e:
         return [], f"Could not parse ffprobe output: {e}"
 
@@ -264,7 +287,7 @@ def extract_and_scan_track(
         ]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            proc = subprocess.run(cmd, capture_output=True, timeout=60)
         except subprocess.TimeoutExpired:
             track.scan_error = "ffmpeg extraction timed out"
             return
@@ -292,6 +315,7 @@ def extract_and_scan_track(
         track.total_blocks = len(sub.blocks)
         track.ad_count = sum(1 for b in sub.blocks if b.is_ad)
         track.warning_count = sum(1 for b in sub.blocks if b.is_warning)
+        track.subtitle = sub   # store for re-thresholding and per-block editing
 
         # Collect up to 5 sample flagged lines for reporting
         for b in sub.blocks:
@@ -307,10 +331,17 @@ def extract_and_scan_track(
 def scan_video(path: Path) -> VideoScanResult:
     """
     Full pipeline: probe → extract each text track → analyze.
-    Returns a VideoScanResult.
+    Returns a VideoScanResult. Never raises — errors are captured in result.error.
     """
     result = VideoScanResult(path=path)
+    try:
+        return _scan_video_inner(path, result)
+    except Exception as e:
+        result.error = f"unexpected error: {e}"
+        return result
 
+
+def _scan_video_inner(path: Path, result: VideoScanResult) -> VideoScanResult:
     tracks, error = probe_video(path)
     if error:
         result.error = error
