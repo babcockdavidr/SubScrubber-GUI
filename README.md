@@ -41,7 +41,7 @@ Subtitle files downloaded from the internet are frequently polluted with ads, di
 pip install -r requirements.txt
 ```
 
-`requirements.txt` installs: `PyQt6`
+`requirements.txt` installs: `PyQt6` and `pysubs`
 
 ---
 
