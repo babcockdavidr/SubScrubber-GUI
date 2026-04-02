@@ -11,7 +11,7 @@ Pipeline:
   4. Atomic swap: write to a temp file first, rename over original only on success
   5. Optional backup: rename original to filename.backup.mkv before overwriting
 
-MKV only. MP4 remux is a future stretch goal.
+Supports MKV (via mkvmerge) and MP4/M4V (via ffmpeg).
 """
 from __future__ import annotations
 
@@ -241,7 +241,9 @@ def remux_with_cleaned_tracks(
     progress_cb: Optional[Callable[[str], None]] = None,
 ) -> RemuxResult:
     """
-    Rebuild the MKV replacing specified subtitle tracks with cleaned versions.
+    Rebuild an MKV file replacing specified subtitle tracks with cleaned versions.
+    This function specifically uses mkvmerge and only supports MKV.
+    For MP4/M4V, use remux_mp4_with_ffmpeg() or the remux_video() router.
 
     Strategy:
       - Pass original MKV with --no-subtitles to drop all subtitle streams
@@ -259,7 +261,7 @@ def remux_with_cleaned_tracks(
     if not video_path.suffix.lower() == ".mkv":
         return RemuxResult(
             success=False,
-            error=f"Remux only supports MKV files. '{video_path.suffix}' is not supported."
+            error=f"Internal routing error: remux_with_cleaned_tracks received a '{video_path.suffix}' file. Only MKV is supported by mkvmerge — MP4/M4V should be routed to remux_mp4_with_ffmpeg()."
         )
 
     cleaned_track_nums = {ct.track.track_num for ct in cleaned}
@@ -382,3 +384,197 @@ def remux_with_cleaned_tracks(
         backup_path=backup_path,
         cleaned_tracks=cleaned,
     )
+
+
+# ---------------------------------------------------------------------------
+# ffmpeg-based MP4 remux
+# ---------------------------------------------------------------------------
+
+def remux_mp4_with_ffmpeg(
+    video_path: Path,
+    all_tracks: List[SubtitleTrack],
+    cleaned: List[CleanedTrack],
+    make_backup: bool = True,
+    progress_cb: Optional[Callable[[str], None]] = None,
+) -> RemuxResult:
+    """
+    Rebuild an MP4 file replacing specified subtitle tracks with cleaned versions.
+
+    Uses ffmpeg since mkvmerge does not support MP4.
+
+    Strategy:
+      - Map all streams from the original EXCEPT the subtitle streams being replaced
+      - Add each cleaned subtitle file as an additional input
+      - Copy all streams without re-encoding (-c copy)
+      - Preserve metadata and disposition flags
+      - Atomic swap with optional backup
+    """
+    ffmpeg = _find_ffmpeg()
+    if not ffmpeg:
+        return RemuxResult(success=False, error="ffmpeg not found.")
+
+    suffix = video_path.suffix.lower()
+    if suffix not in (".mp4", ".m4v"):
+        return RemuxResult(
+            success=False,
+            error=f"MP4 remux only supports .mp4 and .m4v files, not '{suffix}'."
+        )
+
+    if progress_cb:
+        progress_cb("Building ffmpeg command for MP4 remux…")
+
+    cleaned_stream_indices = {ct.track.index for ct in cleaned}
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_out = Path(tmpdir) / f"_remux_{video_path.name}"
+
+        cmd = [ffmpeg, "-v", "error"]
+
+        # Input 0: original video
+        cmd += ["-i", str(video_path)]
+
+        # Additional inputs: one per cleaned subtitle file
+        for ct in cleaned:
+            cmd += ["-i", str(ct.cleaned_path)]
+
+        # Map everything from the original EXCEPT the replaced subtitle streams
+        # Video and audio streams
+        cmd += ["-map", "0:v?", "-map", "0:a?"]
+
+        # Keep original subtitle streams that are NOT being replaced
+        for track in all_tracks:
+            if track.index not in cleaned_stream_indices and track.is_text:
+                cmd += ["-map", f"0:{track.index}"]
+
+        # Image-based subs (PGS etc) — keep as-is
+        for track in all_tracks:
+            if track.index not in cleaned_stream_indices and track.is_image:
+                cmd += ["-map", f"0:{track.index}"]
+
+        # Map each cleaned subtitle input
+        for i, ct in enumerate(cleaned, 1):
+            cmd += ["-map", f"{i}:0"]
+
+        # Copy video and audio without re-encoding
+        cmd += ["-c:v", "copy", "-c:a", "copy"]
+
+        # Kept subtitle streams from original — copy codec
+        cmd += ["-c:s", "copy"]
+
+        # Cleaned subtitle inputs — must be encoded as mov_text for MP4 containers.
+        # External .srt files cannot be stream-copied into MP4; they must be encoded.
+        # We override per-stream after the global -c:s copy using stream specifiers.
+        # Count kept subtitle streams to know the output stream indices for cleaned ones.
+        kept_sub_streams = sum(
+            1 for t in all_tracks
+            if t.index not in cleaned_stream_indices and (t.is_text or t.is_image)
+        )
+        for i in range(len(cleaned)):
+            out_idx = kept_sub_streams + i
+            cmd += [f"-c:s:{out_idx}", "mov_text"]
+
+        # Apply metadata for cleaned tracks
+        for i, ct in enumerate(cleaned):
+            out_sub_idx = kept_sub_streams + i
+            t = ct.track
+            if t.language and t.language != "und":
+                cmd += [f"-metadata:s:s:{out_sub_idx}", f"language={t.language}"]
+            if t.title:
+                cmd += [f"-metadata:s:s:{out_sub_idx}", f"title={t.title}"]
+            # Disposition flags
+            disposition = []
+            if t.default: disposition.append("default")
+            if t.forced:  disposition.append("forced")
+            cmd += [f"-disposition:s:{out_sub_idx}",
+                    "+".join(disposition) if disposition else "0"]
+
+        # MP4 faststart for streaming compatibility
+        cmd += ["-movflags", "+faststart"]
+        cmd += [str(tmp_out), "-y"]
+
+        if progress_cb:
+            progress_cb(f"Running ffmpeg on {video_path.name}…")
+
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            return RemuxResult(success=False, error="ffmpeg timed out (10 min limit)")
+        except Exception as e:
+            return RemuxResult(success=False, error=f"ffmpeg failed to start: {e}")
+
+        if proc.returncode != 0:
+            stderr = proc.stderr.decode("utf-8", errors="replace")[:400]
+            return RemuxResult(success=False, error=f"ffmpeg error: {stderr}")
+
+        if not tmp_out.exists() or tmp_out.stat().st_size == 0:
+            return RemuxResult(success=False, error="ffmpeg produced empty output")
+
+        if progress_cb:
+            progress_cb("Saving output…")
+
+        backup_path: Optional[Path] = None
+
+        if make_backup:
+            backup_path = video_path.with_suffix(".backup.mp4")
+            counter = 1
+            while backup_path.exists():
+                backup_path = video_path.with_name(
+                    f"{video_path.stem}.backup{counter}.mp4"
+                )
+                counter += 1
+            try:
+                video_path.rename(backup_path)
+            except Exception as e:
+                return RemuxResult(success=False, error=f"Could not create backup: {e}")
+        else:
+            try:
+                video_path.unlink()
+            except Exception as e:
+                return RemuxResult(success=False, error=f"Could not remove original: {e}")
+
+        try:
+            shutil.move(str(tmp_out), str(video_path))
+        except Exception as e:
+            if backup_path and backup_path.exists():
+                try:
+                    backup_path.rename(video_path)
+                except Exception:
+                    pass
+            return RemuxResult(
+                success=False,
+                error=f"Could not move remuxed file into place: {e}"
+            )
+
+    return RemuxResult(
+        success=True,
+        output_path=video_path,
+        backup_path=backup_path,
+        cleaned_tracks=cleaned,
+    )
+
+
+def remux_video(
+    video_path: Path,
+    all_tracks: List[SubtitleTrack],
+    cleaned: List[CleanedTrack],
+    make_backup: bool = True,
+    progress_cb: Optional[Callable[[str], None]] = None,
+) -> RemuxResult:
+    """
+    Route to the correct remux backend based on file type.
+    MKV → mkvmerge. MP4/M4V → ffmpeg.
+    """
+    suffix = video_path.suffix.lower()
+    if suffix == ".mkv":
+        return remux_with_cleaned_tracks(
+            video_path, all_tracks, cleaned, make_backup, progress_cb
+        )
+    elif suffix in (".mp4", ".m4v"):
+        return remux_mp4_with_ffmpeg(
+            video_path, all_tracks, cleaned, make_backup, progress_cb
+        )
+    else:
+        return RemuxResult(
+            success=False,
+            error=f"Unsupported format for remux: '{suffix}'. Only MKV and MP4 are supported."
+        )
