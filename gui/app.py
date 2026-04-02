@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QListWidget, QListWidgetItem, QSplitter,
     QTextEdit, QFrame, QScrollArea, QFileDialog, QMessageBox,
     QProgressBar, QStatusBar, QToolBar, QCheckBox, QTabWidget,
-    QSizePolicy, QAbstractItemView, QGroupBox,
+    QSizePolicy, QAbstractItemView, QGroupBox, QSlider,
 )
 
 from core import load_subtitle, write_subtitle, analyze, clean, SUPPORTED_EXTENSIONS
@@ -69,6 +69,7 @@ QPushButton#btn_remove {{
     color: {RED};
     border-color: {RED};
     background: {BG3};
+    padding: 7px 20px;
 }}
 QPushButton#btn_remove:hover {{ background: rgba(243, 139, 168, 0.15); border-color: {RED}; }}
 QPushButton#btn_remove:disabled {{ color: {FG2}; border-color: {BORDER}; background: {BG3}; }}
@@ -77,6 +78,7 @@ QPushButton#btn_keep {{
     color: {GREEN};
     border-color: {GREEN};
     background: {BG3};
+    padding: 7px 20px;
 }}
 QPushButton#btn_keep:hover {{ background: rgba(166, 227, 161, 0.15); border-color: {GREEN}; }}
 
@@ -317,17 +319,21 @@ class BlockRow(QListWidgetItem):
     WARN_COLOR    = QColor(ORANGE)
     NORMAL_COLOR  = QColor(FG2)
 
-    def __init__(self, block: SubBlock):
+    def __init__(self, block: SubBlock, threshold: int = 3):
         super().__init__()
         self.block = block
+        self.threshold = threshold
         self._update_display()
 
     def _update_display(self):
         b = self.block
-        if b.is_ad:
+        t = self.threshold
+        is_ad   = b.regex_matches >= t
+        is_warn = b.regex_matches == t - 1 and t > 1
+        if is_ad:
             tag = "✕ AD"
             self.setForeground(self.AD_COLOR)
-        elif b.is_warning:
+        elif is_warn:
             tag = "⚠ WARN"
             self.setForeground(self.WARN_COLOR)
         else:
@@ -339,9 +345,7 @@ class BlockRow(QListWidgetItem):
         self.setText(f"{tag:8} {b.start:14}  {score_str:5}  {preview}")
 
     def toggle_ad(self):
-        self.block.is_ad = not self.block.is_ad
-        if self.block.is_ad:
-            self.block.is_warning = False
+        self.block.regex_matches = 3 if self.block.regex_matches < 3 else -1
         self._update_display()
 
 
@@ -430,24 +434,11 @@ class MainWindow(QMainWindow):
         title = QLabel("SUBSCRUBBER")
         toolbar.addWidget(title)
 
-        toolbar.addSeparator()
-        self._chk_dry_run = QCheckBox("Dry run")
-        self._chk_warnings = QCheckBox("Remove warnings")
-        toolbar.addWidget(self._chk_dry_run)
-        toolbar.addWidget(self._chk_warnings)
-
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        toolbar.addWidget(spacer)
-
-        self._btn_open_folder = QPushButton("Open Folder…")
-        toolbar.addWidget(self._btn_open_folder)
-
         # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Ready — drop subtitle files to begin")
-        self._version_label = QLabel("v0.5.0")
+        self._version_label = QLabel("v0.6.0")
         self._version_label.setStyleSheet(f"color: {FG2}; font-size: 9pt; padding-right: 6px;")
         self._btn_check_updates = QPushButton("Check for Updates")
         self._btn_check_updates.setStyleSheet(
@@ -464,26 +455,6 @@ class MainWindow(QMainWindow):
         root = QHBoxLayout(central)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
-
-        # ── Left panel: file queue ──────────────────────────────────────
-        left = QWidget()
-        left.setFixedWidth(240)
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
-
-        lbl_queue = QLabel("FILE QUEUE")
-        lbl_queue.setObjectName("section_label")
-
-        self._file_list = QListWidget()
-        self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-
-        drop = DropZone()
-        drop.files_dropped.connect(self._enqueue_files)
-
-        left_layout.addWidget(lbl_queue)
-        left_layout.addWidget(self._file_list, stretch=1)
-        left_layout.addWidget(drop)
 
         # ── Right panel: tabs ───────────────────────────────────────────
         right = QWidget()
@@ -505,15 +476,81 @@ class MainWindow(QMainWindow):
         # Tabs
         self._tabs = QTabWidget()
 
-        # Tab 1: Review
-        review_tab = QWidget()
-        review_layout = QVBoxLayout(review_tab)
-        review_layout.setContentsMargins(6, 6, 6, 6)
-        review_layout.setSpacing(6)
+        # Tab 1: Single File (formerly Review + Report merged)
+        single_tab = QWidget()
+        single_layout = QVBoxLayout(single_tab)
+        single_layout.setContentsMargins(6, 6, 6, 6)
+        single_layout.setSpacing(6)
 
+        # ── Single File controls row ──────────────────────────────────────
+        sf_controls = QHBoxLayout()
+
+        self._chk_dry_run = QCheckBox("Dry run")
+        self._chk_warnings = QCheckBox("Remove warnings")
+        self._btn_open_folder = QPushButton("Open Folder…")
+
+        # Sensitivity slider for single file
+        sf_thresh_frame = QFrame()
+        sf_thresh_frame.setStyleSheet(
+            f"background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;"
+        )
+        sf_thresh_layout = QHBoxLayout(sf_thresh_frame)
+        sf_thresh_layout.setContentsMargins(10, 4, 10, 4)
+
+        sf_thresh_lbl = QLabel("Sensitivity:")
+        sf_thresh_lbl.setStyleSheet(f"color: {FG}; font-weight: bold;")
+        lbl_agg = QLabel("More aggressive")
+        lbl_agg.setStyleSheet(f"color: {RED}; font-size: 8pt;")
+        lbl_con = QLabel("More conservative")
+        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: 8pt;")
+
+        self._sf_slider = QSlider(Qt.Orientation.Horizontal)
+        self._sf_slider.setMinimum(1)
+        self._sf_slider.setMaximum(5)
+        self._sf_slider.setValue(3)
+        self._sf_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._sf_slider.setTickInterval(1)
+        self._sf_slider.setFixedWidth(160)
+
+        self._sf_lbl_threshold = QLabel("Balanced (default)")
+        self._sf_lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: 9pt;")
+
+        sf_thresh_layout.addWidget(sf_thresh_lbl)
+        sf_thresh_layout.addWidget(lbl_agg)
+        sf_thresh_layout.addWidget(self._sf_slider)
+        sf_thresh_layout.addWidget(lbl_con)
+        sf_thresh_layout.addSpacing(16)
+        sf_thresh_layout.addWidget(self._sf_lbl_threshold, stretch=1)
+
+        sf_controls.addWidget(self._chk_dry_run)
+        sf_controls.addWidget(self._chk_warnings)
+        sf_controls.addWidget(self._btn_open_folder)
+        sf_controls.addStretch()
+
+        # ── Main splitter: file queue | block list | detail+report ──────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Block list (left of splitter)
+        # File queue (far left inside Single File tab)
+        queue_panel = QWidget()
+        queue_panel.setFixedWidth(220)
+        queue_layout = QVBoxLayout(queue_panel)
+        queue_layout.setContentsMargins(0, 0, 0, 0)
+        queue_layout.setSpacing(6)
+
+        lbl_queue = QLabel("FILE QUEUE")
+        lbl_queue.setObjectName("section_label")
+
+        self._file_list = QListWidget()
+        self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+        drop = DropZone()
+        drop.files_dropped.connect(self._enqueue_files)
+
+        queue_layout.addWidget(lbl_queue)
+        queue_layout.addWidget(self._file_list, stretch=1)
+        queue_layout.addWidget(drop)
+
+        # Block list (middle)
         block_panel = QWidget()
         block_layout = QVBoxLayout(block_panel)
         block_layout.setContentsMargins(0, 0, 0, 0)
@@ -527,7 +564,10 @@ class MainWindow(QMainWindow):
         block_layout.addWidget(lbl_blocks)
         block_layout.addWidget(self._block_list)
 
-        # Detail panel (right of splitter)
+        # Right side: detail + report stacked in a vertical splitter
+        right_split = QSplitter(Qt.Orientation.Vertical)
+
+        # Block detail panel (top right)
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
@@ -540,14 +580,12 @@ class MainWindow(QMainWindow):
         self._detail_text.setReadOnly(True)
         self._detail_text.setFont(QFont("Consolas", 12))
 
-        # Match reasons
         self._reasons_text = QTextEdit()
         self._reasons_text.setReadOnly(True)
         self._reasons_text.setMaximumHeight(80)
         self._reasons_text.setFont(QFont("Consolas", 11))
         self._reasons_text.setPlaceholderText("Matched patterns will appear here…")
 
-        # Per-block action buttons
         btn_row = QHBoxLayout()
         self._btn_mark_ad = QPushButton("Mark as Ad")
         self._btn_mark_ad.setObjectName("btn_remove")
@@ -570,23 +608,52 @@ class MainWindow(QMainWindow):
         detail_layout.addWidget(self._reasons_text)
         detail_layout.addLayout(btn_row)
 
-        splitter.addWidget(block_panel)
-        splitter.addWidget(detail_panel)
-        splitter.setSizes([420, 380])
+        # Report panel (bottom right)
+        report_panel = QWidget()
+        report_layout = QVBoxLayout(report_panel)
+        report_layout.setContentsMargins(0, 0, 0, 0)
+        report_layout.setSpacing(4)
 
-        review_layout.addWidget(splitter)
-
-        # Tab 2: Report
-        report_tab = QWidget()
-        report_layout = QVBoxLayout(report_tab)
-        report_layout.setContentsMargins(6, 6, 6, 6)
+        lbl_report = QLabel("FILE REPORT")
+        lbl_report.setObjectName("section_label")
         self._report_text = QTextEdit()
         self._report_text.setReadOnly(True)
         self._report_text.setFont(QFont("Consolas", 12))
+
+        report_layout.addWidget(lbl_report)
         report_layout.addWidget(self._report_text)
 
-        self._tabs.addTab(review_tab, "Review")
-        self._tabs.addTab(report_tab, "Report")
+        right_split.addWidget(detail_panel)
+        right_split.addWidget(report_panel)
+        right_split.setSizes([350, 200])
+
+        splitter.addWidget(queue_panel)
+        splitter.addWidget(block_panel)
+        splitter.addWidget(right_split)
+        splitter.setSizes([220, 280, 680])
+
+        # Action bar (Prev/Next/Clean & Save) — lives inside Single File tab
+        action_bar = QHBoxLayout()
+        self._btn_prev = QPushButton("Prev File")
+        self._btn_next = QPushButton("Next File")
+        self._lbl_stats = QLabel("")
+        self._lbl_stats.setObjectName("file_status")
+        self._btn_clean_all = QPushButton("Clean && Save")
+        self._btn_clean_all.setObjectName("btn_save_green")
+        self._btn_clean_all.setEnabled(False)
+        action_bar.addWidget(self._btn_prev)
+        action_bar.addWidget(self._btn_next)
+        action_bar.addStretch()
+        action_bar.addWidget(self._lbl_stats)
+        action_bar.addWidget(self._btn_clean_all)
+
+        single_layout.addLayout(info_row)
+        single_layout.addLayout(sf_controls)
+        single_layout.addWidget(sf_thresh_frame)
+        single_layout.addWidget(splitter, stretch=1)
+        single_layout.addLayout(action_bar)
+
+        self._tabs.addTab(single_tab, "Single File")
 
         # Tab 3: Batch mode
         from .batch_panel import BatchPanel
@@ -603,27 +670,10 @@ class MainWindow(QMainWindow):
         self._regex_editor = RegexEditorPanel()
         self._tabs.addTab(self._regex_editor, "Regex Editor")
 
-        # Bottom action bar
-        action_bar = QHBoxLayout()
-        self._btn_prev = QPushButton("Prev File")
-        self._btn_next = QPushButton("Next File")
-        self._lbl_stats = QLabel("")
-        self._lbl_stats.setObjectName("file_status")
-        self._btn_clean_all = QPushButton("Clean && Save")
-        self._btn_clean_all.setObjectName("btn_save_green")
-        self._btn_clean_all.setEnabled(False)
 
-        action_bar.addWidget(self._btn_prev)
-        action_bar.addWidget(self._btn_next)
-        action_bar.addStretch()
-        action_bar.addWidget(self._lbl_stats)
-        action_bar.addWidget(self._btn_clean_all)
 
-        right_layout.addLayout(info_row)
         right_layout.addWidget(self._tabs, stretch=1)
-        right_layout.addLayout(action_bar)
 
-        root.addWidget(left)
         root.addWidget(right, stretch=1)
 
     # ── Connect signals ───────────────────────────────────────────────────
@@ -642,11 +692,30 @@ class MainWindow(QMainWindow):
         self._batch_panel.open_file_requested.connect(self._open_file_in_review)
         self._regex_editor.pattern_saved.connect(self._on_pattern_saved)
         self._btn_always_ad.clicked.connect(self._always_mark_as_ad)
+        self._sf_slider.valueChanged.connect(self._on_sf_threshold_changed)
 
         # Keyboard shortcuts
         QShortcut(QKeySequence("Delete"), self, self._mark_current_as_ad)
         QShortcut(QKeySequence("Space"),  self, self._keep_current)
         QShortcut(QKeySequence("Ctrl+S"), self, self._save_current)
+
+    # ── Single File sensitivity ──────────────────────────────────────────────
+
+    def _on_sf_threshold_changed(self, value: int):
+        labels = {
+            1: "Very Aggressive",
+            2: "Aggressive",
+            3: "Balanced (default)",
+            4: "Conservative",
+            5: "Very Conservative",
+        }
+        self._sf_lbl_threshold.setText(labels.get(value, str(value)))
+        if self._subtitle is not None:
+            self._populate_block_list(self._subtitle)
+            self._refresh_stats()
+
+    def _sf_threshold(self) -> int:
+        return self._sf_slider.value()
 
     # ── File queue management ─────────────────────────────────────────────
 
@@ -724,8 +793,10 @@ class MainWindow(QMainWindow):
         fmt = subtitle.fmt.value.upper()
         lang = subtitle.language
         n = len(subtitle.blocks)
-        ads = sum(1 for b in subtitle.blocks if b.is_ad)
-        warns = sum(1 for b in subtitle.blocks if b.is_warning)
+        t = self._sf_threshold() if hasattr(self, '_sf_slider') else 3
+        ads = sum(1 for b in subtitle.blocks if b.regex_matches >= t)
+        warns = sum(1 for b in subtitle.blocks
+                    if b.regex_matches == t - 1 and t > 1)
 
         self._lbl_file.setText(
             f"{subtitle.path.name}  ·  {fmt}  ·  lang:{lang}  ·  {n} blocks"
@@ -741,19 +812,17 @@ class MainWindow(QMainWindow):
             f"Analysis complete — {ads} ad block(s) found, {warns} warning(s)"
         )
 
-        # Mark file in queue
+        # Mark file in queue — color only, no stale count badges
         for i in range(self._file_list.count()):
             item = self._file_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == subtitle.path:
                 if ads > 0:
                     item.setForeground(QColor(RED))
-                    item.setText(f"[{ads}✕] {subtitle.path.name}")
                 elif warns > 0:
                     item.setForeground(QColor(ORANGE))
-                    item.setText(f"[{warns}⚠] {subtitle.path.name}")
                 else:
                     item.setForeground(QColor(GREEN))
-                    item.setText(f"[✓] {subtitle.path.name}")
+                item.setText(subtitle.path.name)
 
         self._update_report()
 
@@ -765,9 +834,10 @@ class MainWindow(QMainWindow):
     # ── Block list ────────────────────────────────────────────────────────
 
     def _populate_block_list(self, subtitle: ParsedSubtitle):
+        t = self._sf_threshold() if hasattr(self, '_sf_slider') else 3
         self._block_list.clear()
         for block in subtitle.blocks:
-            row = BlockRow(block)
+            row = BlockRow(block, threshold=t)
             self._block_list.addItem(row)
 
     def _on_block_selected(self, row: int):
@@ -793,9 +863,10 @@ class MainWindow(QMainWindow):
 
         # Text content
         fmt_text = QTextCharFormat()
-        if block.is_ad:
+        t = self._sf_threshold() if hasattr(self, '_sf_slider') else 3
+        if block.regex_matches >= t:
             fmt_text.setForeground(QColor(RED))
-        elif block.is_warning:
+        elif block.regex_matches == t - 1 and t > 1:
             fmt_text.setForeground(QColor(ORANGE))
         else:
             fmt_text.setForeground(QColor(FG))
@@ -840,8 +911,10 @@ class MainWindow(QMainWindow):
     def _refresh_stats(self):
         if not self._subtitle:
             return
-        ads = sum(1 for b in self._subtitle.blocks if b.is_ad)
-        warns = sum(1 for b in self._subtitle.blocks if b.is_warning)
+        t = self._sf_threshold() if hasattr(self, '_sf_slider') else 3
+        ads   = sum(1 for b in self._subtitle.blocks if b.regex_matches >= t)
+        warns = sum(1 for b in self._subtitle.blocks
+                    if b.regex_matches == t - 1 and t > 1)
         self._lbl_stats.setText(
             f"<font color='{RED}'>{ads} ads</font>  "
             f"<font color='{ORANGE}'>{warns} warnings</font>"
@@ -908,7 +981,7 @@ class MainWindow(QMainWindow):
             item = self._file_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == self._subtitle.path:
                 item.setForeground(QColor(GREEN))
-                item.setText(f"[✓] {self._subtitle.path.name}")
+                item.setText(self._subtitle.path.name)
 
     # ── Cross-panel navigation ──────────────────────────────────────────────
 

@@ -233,12 +233,19 @@ class BatchPanel(QWidget):
         self._result_list.setFont(QFont("Consolas", 11))
         self._result_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
-        self._btn_open_in_review = QPushButton("Open in Review Tab")
+        self._btn_open_in_review = QPushButton("Open in Single File Tab")
         self._btn_open_in_review.setEnabled(False)
+        self._btn_full_report = QPushButton("Show Full Report")
+        self._btn_full_report.setEnabled(False)
+        self._btn_full_report.setToolTip("Restore the full batch summary report.")
+
+        file_btns = QHBoxLayout()
+        file_btns.addWidget(self._btn_open_in_review)
+        file_btns.addWidget(self._btn_full_report)
 
         ll.addWidget(lbl_files)
         ll.addWidget(self._result_list, stretch=1)
-        ll.addWidget(self._btn_open_in_review)
+        ll.addLayout(file_btns)
 
         # Right: detail report
         right = QWidget()
@@ -280,6 +287,7 @@ class BatchPanel(QWidget):
         self._slider.valueChanged.connect(self._on_threshold_changed)
         self._result_list.currentRowChanged.connect(self._on_row_selected)
         self._btn_open_in_review.clicked.connect(self._open_in_review)
+        self._btn_full_report.clicked.connect(self._show_full_report)
 
     # ── Folder selection ──────────────────────────────────────────────────
 
@@ -310,6 +318,7 @@ class BatchPanel(QWidget):
         self._report_text.clear()
         self._btn_scan.setEnabled(False)
         self._btn_save.setEnabled(False)
+        self._btn_full_report.setEnabled(False)
         self._lbl_folder.setText("No folder selected")
         self._lbl_status.setText("Select a movies folder to begin.")
 
@@ -378,6 +387,7 @@ class BatchPanel(QWidget):
         self._batch_result = result
         self._progress.setVisible(False)
         self._btn_scan.setEnabled(True)
+        self._btn_full_report.setEnabled(True)
 
         self._result_list.clear()
         for fr in result.results:
@@ -618,6 +628,12 @@ class BatchPanel(QWidget):
                             if row >= 0:
                                 self._on_row_selected(row)
                             return
+
+    def _show_full_report(self):
+        if self._batch_result:
+            self._result_list.clearSelection()
+            self._report_text.setHtml(self._build_report())
+            self._btn_open_in_review.setEnabled(False)
 
     def _open_in_review(self):
         if not self._batch_result:

@@ -490,6 +490,7 @@ class RegexEditorPanel(QWidget):
         self._btn_save.setObjectName("btn_clean_all")
         self._btn_save.setEnabled(False)
         self._btn_discard = QPushButton("Discard Changes")
+        self._btn_discard.setObjectName("btn_remove")
         self._btn_discard.setEnabled(False)
 
         save_row.addWidget(self._lbl_dirty, stretch=1)

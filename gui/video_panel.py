@@ -570,10 +570,14 @@ class VideoScanPanel(QWidget):
         self._btn_scan       = QPushButton("Scan Videos")
         self._btn_scan.setObjectName("btn_clean_all")
         self._btn_scan.setEnabled(False)
+
+        self._lbl_folder = QLabel("No folder selected")
+        self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+
         ctrl.addWidget(self._btn_add_folder)
         ctrl.addWidget(self._btn_clear)
         ctrl.addWidget(self._btn_settings)
-        ctrl.addStretch()
+        ctrl.addWidget(self._lbl_folder, stretch=1)
         ctrl.addWidget(self._btn_scan)
 
         # ── Sensitivity slider ────────────────────────────────────────
@@ -750,7 +754,9 @@ class VideoScanPanel(QWidget):
     def _browse_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Add Video Folder")
         if folder:
-            self._add_files(collect_video_files([Path(folder)]))
+            p = Path(folder)
+            self._lbl_folder.setText(str(p))
+            self._add_files(collect_video_files([p]))
 
     def _add_files(self, paths):
         existing = set(self._queued)
@@ -770,6 +776,7 @@ class VideoScanPanel(QWidget):
         self._btn_remux.setEnabled(False)
         self._btn_extract.setEnabled(False)
         self._lbl_selected.setText("Check boxes on flagged tracks to select for cleaning")
+        self._lbl_folder.setText("No folder selected")
         self._lbl_status.setText("Drop video files or add a folder to begin.")
         self._btn_scan.setEnabled(False)
 
