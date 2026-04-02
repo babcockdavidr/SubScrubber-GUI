@@ -153,13 +153,31 @@ def extract_and_clean_track(
         return None, "image-based track — cannot clean"
 
     ext = TEXT_CODEC_EXT.get(track.codec, ".srt")
-    lang = track.language if track.language != "und" else "und"
-    safe_title = "".join(
-        c for c in (track.title or f"track{track.track_num}")
-        if c.isalnum() or c in " _-"
-    ).strip() or f"track{track.track_num}"
-    out_filename = f"track{track.track_num}_{lang}_{safe_title}{ext}"
+    lang = track.language if track.language and track.language != "und" else "und"
+
+    # Detect SDH from track title (case-insensitive)
+    title_lower = (track.title or "").lower()
+    is_sdh = any(kw in title_lower for kw in ("sdh", "hearing impaired", "hi", "cc"))
+
+    # Build filename: [video_stem].[lang][.sdh].[ext]
+    # Falls back to track-based name if no video_path stem is usable
+    video_stem = video_path.stem if video_path else None
+    if video_stem:
+        lang_suffix = f".{lang}" if lang != "und" else ""
+        sdh_suffix  = ".sdh" if is_sdh else ""
+        out_filename = f"{video_stem}{lang_suffix}{sdh_suffix}{ext}"
+    else:
+        out_filename = f"track{track.track_num}.{lang}{'.sdh' if is_sdh else ''}{ext}"
+
     out_path = dest_dir / out_filename
+
+    # Handle filename collisions (e.g. two English tracks)
+    if out_path.exists():
+        stem = out_path.stem
+        counter = 2
+        while out_path.exists():
+            out_path = dest_dir / f"{stem}.{counter}{ext}"
+            counter += 1
 
     if progress_cb:
         progress_cb(f"Extracting track {track.track_num} ({lang})…")
