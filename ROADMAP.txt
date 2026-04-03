@@ -1,0 +1,136 @@
+SubScrubber — Development Roadmap
+Last updated: v0.6.0
+================================================================================
+
+COMPLETED
+--------------------------------------------------------------------------------
+v0.4.0 — MKVToolNix Update
+  - MKV Clean & Remux via mkvmerge
+  - Per-block Keep button in Video Scan and Batch detail reports
+  - Extract & Save standalone subtitle from video
+  - MKVToolNix Settings dialog (path browse, saved to settings.json)
+  - Sensitivity slider in Video Scan with live re-rendering
+  - HTML detail reports in Video Scan and Batch
+
+v0.5.0 — MP4 Remux Update
+  - MP4 and M4V remuxing via ffmpeg (no extra dependencies)
+  - Check for Updates button in status bar (opt-in, GitHub releases API)
+  - Semantic versioning (v0.x.0 format)
+  - pysubs2 added to requirements.txt
+
+v0.6.0 — Interface Overhaul
+  - Review + Report tabs merged into Single File tab
+  - Sensitivity slider added to Single File tab
+  - Tab-scoped controls (Dry run, Remove warnings, Open Folder inside Single File only)
+  - File queue moved inside Single File tab (tabs always full width, no layout shift)
+  - Show Full Report button in Batch restores full summary after drilling into a file
+  - Video Scan folder label shows selected path after Add Folder
+  - Extract & Save filename format: [video stem].[lang].[ext], SDH auto-detected
+  - File queue shows color only (no stale count badges that don't reflect slider)
+  - Toolbar gap fixed (padding-right removed from SUBSCRUBBER label)
+  - Button height consistency fixed across all tabs
+  - MKVToolNix notice updated to reflect MP4 support without mkvmerge
+
+
+IN PROGRESS
+--------------------------------------------------------------------------------
+v0.7.0 — Subtitle Cleaning Options
+
+  Phase 1 (core logic) — new file: core/cleaner_options.py
+    - apply_cleaning_options(subtitle, options) — operates on block content,
+      not block existence (different from ad detection engine)
+    - strip_music_cues(block) — lines entirely of ♪/♫ or music symbols
+    - strip_sdh_annotations(block) — [ALL CAPS IN BRACKETS] / (All Caps Parens)
+      convention that distinguishes sound FX from normal dialogue
+    - strip_speaker_labels(block) — WORD: or - WORD: at line start (all caps)
+    - strip_formatting_tags(block, preserve_italic, preserve_bold)
+    - strip_between_brackets(block, types) — individual toggles for {} [] () * #
+    - normalize_case(block) — sentence case per line
+    - merge_duplicate_cues(subtitle) — collapse consecutive identical blocks
+      after other cleaning is applied
+
+  Phase 2 (UI) — changes to gui/app.py and gui/batch_panel.py
+    - Collapsible "Cleaning Options" panel in Single File tab below sensitivity slider
+    - Same panel in Batch tab
+    - Checkboxes with sub-options indented under parent (matching reference screenshot)
+    - SDH removal gets visible accessibility warning label
+    - Options apply at clean time, not scan time
+    - Preview mode shows selected block after cleaning options applied
+
+  Notes:
+    - These are content modification features, NOT block removal features
+    - SDH warning: "Removing SDH content reduces accessibility for deaf and
+      hard of hearing viewers"
+
+
+PLANNED
+--------------------------------------------------------------------------------
+v0.8.0 — Settings & Persistence
+  - Unified Settings dialog from toolbar button (NOT a tab)
+  - Internal sub-tabs: General, Paths, About
+  - General: default sensitivity (Single File and Batch separately),
+    default cleaning options state, theme toggle, font size
+  - Paths: mkvmerge path moves here from Video Scan tab
+    (Video Scan Settings button removed)
+  - About: version, KBlixt credit + link, GitHub link, MIT license,
+    Report an Issue button (opens GitHub Issues in browser)
+  - Check for Updates stays in status bar unchanged — DO NOT MOVE
+  - All settings persist to settings.json
+  - Cleaning option defaults from v0.7.0 now persist via Settings
+  - Column sort on Batch (name, ad count, warning count, file size)
+  - String extraction — all user-facing strings to strings.py
+  - Language selector in General (English only, others "coming soon")
+
+v0.9.0 — Packaging & Distribution
+  - PyInstaller: Windows .exe and macOS .app
+  - Linux AppImage
+  - GitHub Actions workflow — auto-build and attach executables on new tag
+  - Optional Windows installer (Inno Setup) — Program Files, Start Menu,
+    file associations for .srt/.ass/.vtt
+  - First-run setup wizard — detects FFmpeg and MKVToolNix, shows status,
+    offers download links. Replaces current scattered warning banners
+  - Session memory — last Batch folder, last Video Scan folder,
+    window size/position persisted across restarts
+  - Drag video onto Single File tab — detect subtitle streams, offer to
+    extract and load directly
+
+v1.0.0 — Accessibility, Polish & Release
+  - Light theme and high contrast theme (toggle in Settings)
+  - Font size setting (small/medium/large)
+  - Keyboard navigation audit — every action reachable without mouse
+  - Screen reader compatibility — setAccessibleName/setAccessibleDescription
+    on all major widgets (Windows Narrator, macOS VoiceOver)
+  - Tooltip audit — every button has one
+  - First translation — Spanish (detection profiles already exist,
+    good proof of string system)
+  - CHANGELOG.md in repo, linked from About dialog
+  - GitHub Pages documentation site from README with tab screenshots
+  - File association on macOS
+  - Full test pass: Windows, macOS, Linux
+  - Release candidate period before tagging 1.0.0
+  - Final branding pass — every string, label, tooltip reviewed
+
+
+POST-1.0 STRETCH GOALS (noted, not planned)
+--------------------------------------------------------------------------------
+  - Android via BeeWare
+  - Second language translation (French, Dutch — profiles already exist)
+  - OCR for image-based subtitles (PGS/VOBSUB via Tesseract)
+  - Subtitle format conversion (SRT ↔ ASS etc.)
+  - Auto-update (download and apply in-app — security implications to review)
+  - Plugin system (user-written detection logic beyond regex)
+
+
+DECISIONS & STANDING RULES
+--------------------------------------------------------------------------------
+  - Check for Updates stays in status bar. Opt-in and visible. Non-negotiable.
+  - Settings is a dialog, NOT a tab alongside real features.
+  - No emojis on buttons except the gear icon on Settings.
+  - Sensitivity slider recommendations: level 4 for TV, level 5 for movies.
+  - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0 etc.)
+  - Remux supports MKV (mkvmerge) and MP4/M4V (ffmpeg). No mkvmerge needed for MP4.
+  - Extract & Save filename: [video stem].[lang].[ext] e.g. Movie.eng.srt
+    SDH tracks: Movie.eng.sdh.srt
+  - File queue in Single File shows color only, no stale count badges.
+  - SubScrubber is an accessibility tool — SDH removal features must carry
+    a visible warning. Never make destructive accessibility options a default.
