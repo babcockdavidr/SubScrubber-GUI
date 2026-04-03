@@ -28,6 +28,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core import collect_files, run_batch, save_batch, BatchResult, FileResult, SUPPORTED_EXTENSIONS
+from core import apply_cleaning_options, block_will_be_removed
+from gui.settings_dialog import load_cleaning_options
 from core.subtitle import ParsedSubtitle
 from .colors import BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 
@@ -98,8 +100,15 @@ class ResultRow(QListWidgetItem):
 
         if fr.subtitle:
             ads, warns = _classify(fr.subtitle, threshold)
+            cleaning_opts = load_cleaning_options()
+            opts_count = sum(
+                1 for b in fr.subtitle.blocks
+                if b.regex_matches < threshold
+                and block_will_be_removed(b.content, cleaning_opts)
+            ) if cleaning_opts.any_enabled() else 0
         else:
             ads, warns = fr.ad_count, fr.warning_count
+            opts_count = 0
 
         # Show relative path (parent folder / filename) so user knows the movie
         try:
@@ -107,14 +116,20 @@ class ResultRow(QListWidgetItem):
         except Exception:
             display = fr.path.name
 
-        if ads > 0:
+        if ads > 0 and opts_count > 0:
+            self.setText(f"[{ads:>2} ads +{opts_count:>3} opts]  {display}")
+            self.setForeground(QColor(RED))
+        elif ads > 0:
             self.setText(f"[{ads:>2} ads  ]  {display}")
             self.setForeground(QColor(RED))
         elif warns > 0:
             self.setText(f"[{warns:>2} warns]  {display}")
             self.setForeground(QColor(ORANGE))
+        elif opts_count > 0:
+            self.setText(f"[{opts_count:>3} opts  ]  {display}")
+            self.setForeground(QColor(ACCENT))
         else:
-            self.setText(f"[  clean ]  {display}")
+            self.setText(f"[  clean  ]  {display}")
             self.setForeground(QColor(GREEN))
 
 
@@ -128,6 +143,7 @@ class BatchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._batch_result: Optional[BatchResult] = None
+        self._current_fr = None  # FileResult currently shown in detail, None = full summary
         self._worker: Optional[BatchWorker] = None
         self._all_paths: List[Path] = []
         self._root_folder: Optional[Path] = None
@@ -287,6 +303,7 @@ class BatchPanel(QWidget):
         self._slider.valueChanged.connect(self._on_threshold_changed)
         self._result_list.currentRowChanged.connect(self._on_row_selected)
         self._btn_open_in_review.clicked.connect(self._open_in_review)
+
         self._btn_full_report.clicked.connect(self._show_full_report)
 
     # ── Folder selection ──────────────────────────────────────────────────
@@ -327,10 +344,15 @@ class BatchPanel(QWidget):
     def _on_threshold_changed(self, value: int):
         self._threshold = value
         self._lbl_threshold.setText(THRESHOLD_LABELS.get(value, str(value)))
-        # Re-classify and refresh all rows live without rescanning
         if self._batch_result:
             self._refresh_rows()
             self._update_summary_counts()
+            # Re-render whichever view is currently shown
+            if self._current_fr is not None:
+                row = self._batch_result.results.index(self._current_fr)
+                self._on_row_selected(row)
+            else:
+                self._report_text.setHtml(self._build_report())
 
     def _refresh_rows(self):
         for i in range(self._result_list.count()):
@@ -401,14 +423,20 @@ class BatchPanel(QWidget):
         if not self._batch_result:
             return ""
         t = self._threshold
+        cleaning_opts = load_cleaning_options()
         flagged, clean, errors = [], [], []
         for r in self._batch_result.results:
             if r.error:
                 errors.append(r)
                 continue
             ads, warns = _classify(r.subtitle, t) if r.subtitle else (0, 0)
-            if ads > 0 or (warns > 0 and self._chk_warnings.isChecked()):
-                flagged.append((r, ads, warns))
+            opts_count = sum(
+                1 for b in r.subtitle.blocks
+                if b.regex_matches < t
+                and block_will_be_removed(b.content, cleaning_opts)
+            ) if (r.subtitle and cleaning_opts.any_enabled()) else 0
+            if ads > 0 or opts_count > 0 or (warns > 0 and self._chk_warnings.isChecked()):
+                flagged.append((r, ads, warns, opts_count))
             else:
                 clean.append(r)
 
@@ -429,6 +457,8 @@ class BatchPanel(QWidget):
   .file-warn   {{ border-left-color:#fab387; }}
   .block-ad    {{ margin:2px 0 2px 0px; padding:5px 10px; background:#2a1a22;
                   border-left:4px solid #f38ba8; }}
+  .block-opt   {{ margin:2px 0 2px 0px; padding:5px 10px; background:#1a1f2e;
+                  border-left:4px solid #4e9eff; }}
   .block-warn  {{ margin:2px 0 2px 0px; padding:5px 10px; background:#231f15;
                   border-left:4px solid #fab387; }}
   .block-text  {{ color:#ff9eb5; font-weight:bold; font-size:13px; }}
@@ -456,21 +486,25 @@ class BatchPanel(QWidget):
 
         if flagged:
             html.append('<div class="section">FILES WITH ADS / WARNINGS</div>')
-            for r, ads, warns in flagged:
+            for r, ads, warns, opts_count in flagged:
                 ad_tag = f'<span class="tag-ad">{ads} ads</span>' if ads else ''
+                opt_tag = (f'<span style="color:#4e9eff;font-weight:bold">{opts_count} opts</span>'
+                           if opts_count else '')
+                sep = ' + ' if ad_tag and opt_tag else ''
                 wn_tag = f'<span class="tag-warn">{warns} warns</span>' if warns else ''
                 html.append(f'<div class="file-header">'
-                            f'&nbsp;{ad_tag} {wn_tag}&nbsp;&nbsp;'
+                            f'&nbsp;{ad_tag}{sep}{opt_tag} {wn_tag}&nbsp;&nbsp;'
                             f'<span style="color:#cdd6f4">{esc(r.path.parent.name)}/</span>'
                             f'<span style="color:#fff;font-weight:bold">{esc(r.path.name)}</span>'
                             f'</div>')
                 if r.subtitle:
                     for b in r.subtitle.blocks:
+                        will_clean = block_will_be_removed(b.content, cleaning_opts)
+                        reasons_html = " ".join(
+                            f'<span class="reason-tag">{esc(h)}</span>'
+                            for h in dict.fromkeys(b.hints)
+                        )
                         if b.regex_matches >= t:
-                            reasons_html = " ".join(
-                                f'<span class="reason-tag">{esc(h)}</span>'
-                                for h in dict.fromkeys(b.hints)
-                            )
                             html.append(
                                 f'<div class="block-ad">'
                                 f'<span class="tag-ad">AD</span>&nbsp;'
@@ -479,11 +513,17 @@ class BatchPanel(QWidget):
                                 f'<div class="block-meta">{reasons_html}</div>'
                                 f'</div>'
                             )
-                        elif b.regex_matches == t - 1 and t > 1:
-                            reasons_html = " ".join(
-                                f'<span class="reason-tag">{esc(h)}</span>'
-                                for h in dict.fromkeys(b.hints)
+                        elif will_clean:
+                            html.append(
+                                f'<div class="block-opt">'
+                                f'<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>&nbsp;'
+                                f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
+                                f'<span style="color:#89b4fa">{esc(b.text[:80])}</span>'
+                                f'<div class="block-meta" style="color:#4e9eff">'
+                                f'will be removed by cleaning options</div>'
+                                f'</div>'
                             )
+                        elif b.regex_matches == t - 1 and t > 1:
                             html.append(
                                 f'<div class="block-warn">'
                                 f'<span class="tag-warn">WARN</span>&nbsp;'
@@ -513,8 +553,10 @@ class BatchPanel(QWidget):
     def _on_row_selected(self, row: int):
         if row < 0 or not self._batch_result:
             self._btn_open_in_review.setEnabled(False)
+            self._current_fr = None
             return
         fr = self._batch_result.results[row]
+        self._current_fr = fr
         self._btn_open_in_review.setEnabled(fr.ok)
 
         if not fr.subtitle:
@@ -526,6 +568,7 @@ class BatchPanel(QWidget):
             return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
         t = self._threshold
+        cleaning_opts = load_cleaning_options()
         ads, warns = _classify(fr.subtitle, t)
 
         html = [f"""<style>
@@ -537,6 +580,8 @@ class BatchPanel(QWidget):
                 border-bottom:1px solid #2a3347; padding-bottom:6px; }}
   .block-ad  {{ margin:4px 0; padding:6px 12px; background:#2a1a22;
                 border-left:4px solid #f38ba8; }}
+  .block-opt {{ margin:4px 0; padding:6px 12px; background:#1a1f2e;
+                border-left:4px solid #4e9eff; }}
   .block-warn{{ margin:4px 0; padding:6px 12px; background:#231f15;
                 border-left:4px solid #fab387; }}
   .block-kept{{ margin:4px 0; padding:6px 12px; background:#1e2535;
@@ -547,6 +592,7 @@ class BatchPanel(QWidget):
   .tag-warn  {{ color:#ffc990; font-weight:bold; }}
   .ts        {{ color:#7dcfff; font-size:12px; }}
   .ad-text   {{ color:#ff9eb5; font-weight:bold; font-size:13px; }}
+  .opt-text  {{ color:#89b4fa; font-size:13px; }}
   .warn-text {{ color:#ffc990; font-weight:bold; font-size:13px; }}
   .rm        {{ color:#565f89; font-size:11px; }}
   .reason    {{ color:#565f89; font-size:11px; margin-right:8px; }}
@@ -566,18 +612,27 @@ class BatchPanel(QWidget):
         FG2 = '#6c7a96'
         for b in fr.subtitle.blocks:
             is_kept = getattr(b, '_kept', False)
-            if b.regex_matches >= t or (b.regex_matches == t - 1 and t > 1):
+            will_clean = block_will_be_removed(b.content, cleaning_opts)
+            if b.regex_matches >= t or will_clean or (b.regex_matches == t - 1 and t > 1):
                 found_any = True
                 is_ad = b.regex_matches >= t
                 reasons_html = " ".join(
                     f'<span class="reason">{esc(h)}</span>'
                     for h in dict.fromkeys(b.hints)
                 )
+                if will_clean and b.regex_matches < t:
+                    reasons_html += '<span class="reason" style="color:#4e9eff">cleaning options</span>'
                 if is_kept:
                     div_cls  = "block-kept"
                     tag      = '<span class="tag-kept">KEPT</span>'
                     txt_cls  = "kept-text"
                     btn_lbl  = "Kept — click to undo"
+                    btn_col  = FG2
+                elif will_clean and b.regex_matches < t:
+                    div_cls  = "block-opt"
+                    tag      = '<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>'
+                    txt_cls  = "opt-text"
+                    btn_lbl  = "Keep — not an ad"
                     btn_col  = FG2
                 elif is_ad:
                     div_cls  = "block-ad"
@@ -610,6 +665,40 @@ class BatchPanel(QWidget):
         if not found_any:
             html.append('<div class="clean-msg">No issues found at this threshold.</div>')
 
+        # Append cleaning options report if any changes were made
+        cr = getattr(fr, 'cleaning_report', None)
+        if cr and cr.any_changes:
+            html.append('<div class="section">CLEANING OPTIONS APPLIED</div>')
+            if cr.removals():
+                html.append(f'<div class="meta-row" style="color:#f38ba8">')
+                html.append(f'Removed {len(cr.removals())} block(s):</div>')
+                for a in cr.removals():
+                    html.append(
+                        f'<div class="block-ad">'
+                        f'<span class="tag-ad">REMOVED</span>&nbsp;'
+                        f'<span class="block-ts">[{esc(a.timestamp)}]</span>&nbsp;'
+                        f'<span style="color:#f38ba8">{esc(a.reason)}</span><br>'
+                        f'<span style="color:#888;text-decoration:line-through">'
+                        f'{esc(a.original)}</span></div>'
+                    )
+            if cr.modifications():
+                html.append(f'<div class="meta-row" style="color:#ffc990">')
+                html.append(f'Modified {len(cr.modifications())} block(s):</div>')
+                for a in cr.modifications():
+                    html.append(
+                        f'<div class="block-warn">'
+                        f'<span class="tag-warn">MODIFIED</span>&nbsp;'
+                        f'<span class="block-ts">[{esc(a.timestamp)}]</span>&nbsp;'
+                        f'<span style="color:#ffc990">{esc(a.reason)}</span><br>'
+                        f'<span style="color:#888;text-decoration:line-through">'
+                        f'{esc(a.original)}</span></div>'
+                    )
+            if cr.duplicates_merged:
+                html.append(
+                    f'<div class="meta-row" style="color:#a6e3a1">'
+                    f'Merged {cr.duplicates_merged} duplicate cue(s).</div>'
+                )
+
         self._report_text.setHtml("\n".join(html))
 
     def _on_report_link(self, url):
@@ -632,6 +721,7 @@ class BatchPanel(QWidget):
     def _show_full_report(self):
         if self._batch_result:
             self._result_list.clearSelection()
+            self._current_fr = None
             self._report_text.setHtml(self._build_report())
             self._btn_open_in_review.setEnabled(False)
 
@@ -698,6 +788,13 @@ class BatchPanel(QWidget):
                                   if id(b) not in remove_ids]
             for idx, b in enumerate(r.subtitle.blocks, 1):
                 b.current_index = idx
+
+            # Apply global cleaning options
+            opts = load_cleaning_options()
+            if opts.any_enabled():
+                _, _cr = apply_cleaning_options(r.subtitle, opts)
+                r.cleaning_report = _cr
+
             try:
                 from core.subtitle import write_subtitle
                 write_subtitle(r.subtitle)

@@ -25,8 +25,10 @@ from core import (
     mkvmerge_available, get_mkvmerge_path, set_mkvmerge_path,
     extract_and_clean_track, remux_with_cleaned_tracks, remux_video,
     VideoScanResult, SubtitleTrack, VIDEO_EXTENSIONS,
-    CleanedTrack,
+    CleanedTrack, apply_cleaning_options,
 )
+from gui.settings_dialog import load_cleaning_options
+from core import block_will_be_removed
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 
 THRESHOLD_LABELS = {
@@ -65,6 +67,8 @@ HTML_STYLE = f"""<style>
   .meta-val {{ color:{FG}; font-weight:bold; }}
   .block-ad {{ margin:3px 0 3px 0px; padding:5px 10px; background:#2a1a22;
                border-left:4px solid {RED}; }}
+  .block-opt{{ margin:3px 0 3px 0px; padding:5px 10px; background:#1a1f2e;
+               border-left:4px solid {ACCENT}; }}
   .block-warn{{ margin:3px 0 3px 0px; padding:5px 10px; background:#231f15;
                border-left:4px solid {ORANGE}; }}
   .block-kept{{ margin:3px 0 3px 0px; padding:5px 10px; background:#1e2535;
@@ -80,6 +84,7 @@ HTML_STYLE = f"""<style>
   .tag-img  {{ color:{FG2}; }}
   .ts       {{ color:#7dcfff; font-size:12px; }}
   .ad-text  {{ color:#ff9eb5; font-weight:bold; }}
+  .opt-text {{ color:#89b4fa; }}
   .warn-text{{ color:#ffc990; font-weight:bold; }}
   .kept-text{{ color:{FG2}; font-style:italic; text-decoration:line-through; }}
   .reason   {{ color:#565f89; font-size:11px; margin-right:8px; }}
@@ -138,43 +143,63 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
         return "\n".join(parts)
 
     # Use stored subtitle for threshold-aware counts
+    cleaning_opts = load_cleaning_options()
     sub = track.subtitle
     if sub is not None:
         ads   = [b for b in sub.blocks if b.regex_matches >= threshold]
         warns = [b for b in sub.blocks
                  if b.regex_matches == threshold - 1 and threshold > 1]
         kept  = [b for b in sub.blocks if getattr(b, '_kept', False)]
+        clean_opt_blocks = [
+            b for b in sub.blocks
+            if b.regex_matches < threshold
+            and not getattr(b, '_kept', False)
+            and block_will_be_removed(b.content, cleaning_opts)
+        ]
     else:
-        ads, warns, kept = [], [], []
+        ads, warns, kept, clean_opt_blocks = [], [], [], []
 
     parts.append('<div class="section">Results</div>')
     row("Blocks:", str(track.total_blocks))
     row("Ads at this threshold:", str(len(ads)),
         color="#ff9eb5" if ads else GREEN)
+    if clean_opt_blocks:
+        row("Removed by cleaning options:", str(len(clean_opt_blocks)),
+            color="#ff9eb5")
     row("Warnings at this threshold:", str(len(warns)),
         color="#ffc990" if warns else None)
     if kept:
         row("Manually kept (won't be removed):", str(len(kept)),
             color=FG2)
 
-    if sub is not None and (ads or warns):
+    if sub is not None and (ads or warns or clean_opt_blocks):
         parts.append(
             f'<div class="note">Click "Keep — not an ad" on any block below '
             f'to exclude it from cleaning. Changes apply when you Clean &amp; Remux.</div>'
         )
         parts.append('<div class="section">Flagged Blocks</div>')
-        for b in ads + warns:
+        for b in ads + clean_opt_blocks + warns:
             is_kept = getattr(b, '_kept', False)
             is_ad   = b.regex_matches >= threshold
+            is_clean_opt = b in clean_opt_blocks
             reasons_html = " ".join(
                 f'<span class="reason">{_esc(h)}</span>'
                 for h in dict.fromkeys(b.hints)
             ) if hasattr(b, 'hints') else ""
+            if is_clean_opt and not is_ad:
+                reasons_html += '<span class="reason" style="color:#4e9eff">cleaning options</span>'
             if is_kept:
                 div_class = "block-kept"
                 tag = '<span class="tag-kept">KEPT</span>'
                 text_class = "kept-text"
                 btn_label = "✓ Kept — click to undo"
+                btn_color = FG2
+                btn_border = BORDER
+            elif is_clean_opt and not is_ad:
+                div_class = "block-opt"
+                tag = '<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>'
+                text_class = "opt-text"
+                btn_label = "Keep — not an ad"
                 btn_color = FG2
                 btn_border = BORDER
             elif is_ad:
@@ -556,8 +581,8 @@ class VideoScanPanel(QWidget):
 
         self._mkv_notice = QLabel()
         self._mkv_notice.setStyleSheet(
-            f"color: {FG2}; background: transparent; border: 1px solid {BORDER};"
-            f"border-radius: 4px; padding: 4px 10px; font-size: 10pt;"
+            f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
         )
         self._mkv_notice.setWordWrap(True)
         self._mkv_notice.setVisible(False)
@@ -566,7 +591,6 @@ class VideoScanPanel(QWidget):
         ctrl = QHBoxLayout()
         self._btn_add_folder = QPushButton("Add Folder…")
         self._btn_clear      = QPushButton("Clear")
-        self._btn_settings   = QPushButton("⚙ Settings…")
         self._btn_scan       = QPushButton("Scan Videos")
         self._btn_scan.setObjectName("btn_clean_all")
         self._btn_scan.setEnabled(False)
@@ -576,7 +600,6 @@ class VideoScanPanel(QWidget):
 
         ctrl.addWidget(self._btn_add_folder)
         ctrl.addWidget(self._btn_clear)
-        ctrl.addWidget(self._btn_settings)
         ctrl.addWidget(self._lbl_folder, stretch=1)
         ctrl.addWidget(self._btn_scan)
 
@@ -713,7 +736,6 @@ class VideoScanPanel(QWidget):
         self._btn_add_folder.clicked.connect(self._browse_folder)
         self._btn_clear.clicked.connect(self._clear)
         self._btn_scan.clicked.connect(self._scan)
-        self._btn_settings.clicked.connect(self._open_settings)
         self._btn_remux.clicked.connect(self._remux_selected)
         self._btn_extract.clicked.connect(self._extract_selected)
         self._slider.valueChanged.connect(self._on_threshold_changed)
@@ -735,13 +757,15 @@ class VideoScanPanel(QWidget):
             self._ffmpeg_notice.setVisible(True)
         if not mkvmerge_available():
             self._mkv_notice.setText(
-                "ℹ  mkvmerge not found — Clean & Remux unavailable. "
-                "Install MKVToolNix or set path via ⚙ Settings."
+                "⚠  mkvmerge not found — Clean & Remux is unavailable for MKV files. "
+                "MP4 and M4V files can still be remuxed using FFmpeg. "
+                "Install MKVToolNix or set the path via ⚙ Settings to enable MKV remux."
             )
             self._mkv_notice.setVisible(True)
 
     def _open_settings(self):
-        dlg = VideoSettingsDialog(self)
+        from gui.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self)
         dlg.exec()
         if mkvmerge_available():
             self._mkv_notice.setVisible(False)
@@ -808,7 +832,17 @@ class VideoScanPanel(QWidget):
 
             has_ads  = any(tr.ads_at_threshold(t) > 0 for tr in result.tracks)
             has_warn = any(tr.warnings_at_threshold(t) > 0 for tr in result.tracks)
-            color = RED if has_ads else (ORANGE if has_warn else FG2)
+            cleaning_opts_refresh = load_cleaning_options()
+            has_opts = (
+                cleaning_opts_refresh.any_enabled() and
+                any(
+                    tr.subtitle is not None and
+                    any(block_will_be_removed(b.content, cleaning_opts_refresh)
+                        for b in tr.subtitle.blocks)
+                    for tr in result.tracks
+                )
+            )
+            color = RED if has_ads else (ORANGE if has_warn else (ACCENT if has_opts else FG2))
             root_item.setForeground(0, QColor(color))
 
             for j in range(root_item.childCount()):
@@ -819,6 +853,11 @@ class VideoScanPanel(QWidget):
                 track: SubtitleTrack = cdata[2]
                 status = track.status_at_threshold(t)
                 tc     = STATUS_COLORS.get(status, FG2)
+                # Override color to blue if track has opts but no ads
+                if status == "CLEAN" and cleaning_opts_refresh.any_enabled() and track.subtitle:
+                    if any(block_will_be_removed(b.content, cleaning_opts_refresh)
+                           for b in track.subtitle.blocks):
+                        tc = ACCENT
                 icon   = {"ADS":"✕","WARN":"⚠","CLEAN":"✓","IMAGE":"◻"}.get(status,"·")
                 # Preserve checkbox state, just update text and color
                 old_text = child.text(0)
@@ -882,20 +921,42 @@ class VideoScanPanel(QWidget):
             else:
                 has_ads  = any(tr.ads_at_threshold(t) > 0 for tr in result.tracks)
                 has_warn = any(tr.warnings_at_threshold(t) > 0 for tr in result.tracks)
-                color = RED if has_ads else (ORANGE if has_warn else FG2)
+                cleaning_opts = load_cleaning_options()
+                has_opts_root = (
+                    cleaning_opts.any_enabled() and
+                    any(
+                        tr.subtitle is not None and
+                        any(block_will_be_removed(b.content, cleaning_opts)
+                            for b in tr.subtitle.blocks)
+                        for tr in result.tracks
+                    )
+                )
+                color = RED if has_ads else (ORANGE if has_warn else (ACCENT if has_opts_root else FG2))
                 root_item.setForeground(0, QColor(color))
                 for track in result.tracks:
                     status = track.status_at_threshold(t)
                     tc     = STATUS_COLORS.get(status, FG2)
                     icon   = {"ADS":"✕","WARN":"⚠","CLEAN":"✓","IMAGE":"◻"}.get(status,"·")
                     track_item = QTreeWidgetItem([f"{icon}  {track.display_name}"])
+                    # Override color to blue if track has opts but no ads/warns
+                    if status == "CLEAN" and cleaning_opts.any_enabled() and track.subtitle:
+                        if any(block_will_be_removed(b.content, cleaning_opts)
+                               for b in track.subtitle.blocks):
+                            tc = ACCENT
                     track_item.setForeground(0, QColor(tc))
                     track_item.setData(0, Qt.ItemDataRole.UserRole,
                                        ("track", result, track))
-                    # Checkbox only on flagged text tracks
+                    # Checkbox on flagged tracks or tracks with cleaning opt hits
+                    has_opts = (
+                        track.subtitle is not None and
+                        cleaning_opts.any_enabled() and
+                        any(block_will_be_removed(b.content, cleaning_opts)
+                            for b in track.subtitle.blocks)
+                    )
                     if (track.is_text and not track.scan_error and
                             (track.ads_at_threshold(t) > 0 or
-                             track.warnings_at_threshold(t) > 0)):
+                             track.warnings_at_threshold(t) > 0 or
+                             has_opts)):
                         track_item.setCheckState(0, Qt.CheckState.Unchecked)
                     root_item.addChild(track_item)
             self._tree.addTopLevelItem(root_item)
@@ -995,6 +1056,14 @@ class VideoScanPanel(QWidget):
             if err:
                 errors.append(f"{result.path.name} track {track.track_num}: {err}")
             else:
+                # Apply global cleaning options to extracted subtitle
+                if ct and ct.cleaned_path.exists():
+                    from core import load_subtitle, write_subtitle
+                    opts = load_cleaning_options()
+                    if opts.any_enabled():
+                        sub = load_subtitle(ct.cleaned_path)
+                        apply_cleaning_options(sub, opts)  # report not shown for extract
+                        write_subtitle(sub, dest=ct.cleaned_path)
                 saved += 1
 
         if errors:
@@ -1014,7 +1083,7 @@ class VideoScanPanel(QWidget):
             return
         if not mkvmerge_available():
             QMessageBox.warning(self, "mkvmerge not found",
-                                "Set the mkvmerge path via ⚙ Settings.")
+                                "Set the mkvmerge path via Settings in the toolbar.")
             return
 
         by_video: Dict[Path, tuple] = {}

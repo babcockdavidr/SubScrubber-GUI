@@ -24,6 +24,9 @@ from PyQt6.QtWidgets import (
 )
 
 from core import load_subtitle, write_subtitle, analyze, clean, SUPPORTED_EXTENSIONS
+from core import CleaningOptions, apply_cleaning_options
+from .settings_dialog import SettingsDialog, load_cleaning_options
+from core import block_will_be_removed
 from core import VIDEO_EXTENSIONS
 from core.subtitle import ParsedSubtitle, SubBlock
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
@@ -49,7 +52,6 @@ QToolBar QLabel {{
     font-weight: bold;
     color: {ACCENT};
     letter-spacing: 2px;
-    padding-right: 16px;
 }}
 
 /* ── Buttons ── */
@@ -124,8 +126,10 @@ QListWidget::item {{
     border-bottom: 1px solid {BORDER};
 }}
 QListWidget::item:selected {{
-    background: {ACCENT}33;
-    color: {FG};
+    background: {BG3};
+}}
+QListWidget::item:selected:hover {{
+    background: {BG3};
 }}
 QListWidget::item:hover {{
     background: {BG3};
@@ -325,14 +329,31 @@ class BlockRow(QListWidgetItem):
         self.threshold = threshold
         self._update_display()
 
+class BlockRow(QListWidgetItem):
+    AD_COLOR      = QColor(RED)
+    WARN_COLOR    = QColor(ORANGE)
+    NORMAL_COLOR  = QColor(FG2)
+    OPT_COLOR     = QColor(ACCENT)
+
+    def __init__(self, block: SubBlock, threshold: int = 3):
+        super().__init__()
+        self.block = block
+        self.threshold = threshold
+        self._update_display()
+
     def _update_display(self):
         b = self.block
         t = self.threshold
         is_ad   = b.regex_matches >= t
         is_warn = b.regex_matches == t - 1 and t > 1
+        opts = load_cleaning_options()
+        will_clean = block_will_be_removed(b.content, opts)
         if is_ad:
             tag = "✕ AD"
             self.setForeground(self.AD_COLOR)
+        elif will_clean:
+            tag = "✕ OPT"
+            self.setForeground(self.OPT_COLOR)
         elif is_warn:
             tag = "⚠ WARN"
             self.setForeground(self.WARN_COLOR)
@@ -434,11 +455,22 @@ class MainWindow(QMainWindow):
         title = QLabel("SUBSCRUBBER")
         toolbar.addWidget(title)
 
+        tb_spacer = QWidget()
+        tb_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(tb_spacer)
+
+        self._btn_settings = QPushButton("⚙ Settings")
+        self._btn_settings.setStyleSheet(
+            f"font-size: 9pt; padding: 2px 10px; color: {FG2};"
+            f"border: 1px solid {BORDER}; border-radius: 3px; background: transparent;"
+        )
+        toolbar.addWidget(self._btn_settings)
+
         # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage("Ready — drop subtitle files to begin")
-        self._version_label = QLabel("v0.6.0")
+        self._version_label = QLabel("v0.7.0")
         self._version_label.setStyleSheet(f"color: {FG2}; font-size: 9pt; padding-right: 6px;")
         self._btn_check_updates = QPushButton("Check for Updates")
         self._btn_check_updates.setStyleSheet(
@@ -542,6 +574,15 @@ class MainWindow(QMainWindow):
 
         self._file_list = QListWidget()
         self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # Set palette so the persistent selection bar is a neutral color
+        # regardless of item foreground (status colors bleed through transparent backgrounds)
+        from PyQt6.QtGui import QPalette, QColor as _QColor
+        _pal = self._file_list.palette()
+        _pal.setColor(QPalette.ColorGroup.Active,   QPalette.ColorRole.Highlight, _QColor("#2a3f5f"))
+        _pal.setColor(QPalette.ColorGroup.Inactive, QPalette.ColorRole.Highlight, _QColor("#2a3f5f"))
+        _pal.setColor(QPalette.ColorGroup.Active,   QPalette.ColorRole.HighlightedText, _QColor("#ffffff"))
+        _pal.setColor(QPalette.ColorGroup.Inactive, QPalette.ColorRole.HighlightedText, _QColor("#ffffff"))
+        self._file_list.setPalette(_pal)
 
         drop = DropZone()
         drop.files_dropped.connect(self._enqueue_files)
@@ -692,12 +733,18 @@ class MainWindow(QMainWindow):
         self._batch_panel.open_file_requested.connect(self._open_file_in_review)
         self._regex_editor.pattern_saved.connect(self._on_pattern_saved)
         self._btn_always_ad.clicked.connect(self._always_mark_as_ad)
+        self._btn_settings.clicked.connect(self._open_settings)
         self._sf_slider.valueChanged.connect(self._on_sf_threshold_changed)
-
         # Keyboard shortcuts
         QShortcut(QKeySequence("Delete"), self, self._mark_current_as_ad)
         QShortcut(QKeySequence("Space"),  self, self._keep_current)
         QShortcut(QKeySequence("Ctrl+S"), self, self._save_current)
+
+    # ── Settings ─────────────────────────────────────────────────────────────
+
+    def _open_settings(self):
+        dlg = SettingsDialog(self)
+        dlg.exec()
 
     # ── Single File sensitivity ──────────────────────────────────────────────
 
@@ -801,18 +848,27 @@ class MainWindow(QMainWindow):
         self._lbl_file.setText(
             f"{subtitle.path.name}  ·  {fmt}  ·  lang:{lang}  ·  {n} blocks"
         )
-        self._lbl_stats.setText(
-            f"<font color='{RED}'>{ads} ads</font>  "
-            f"<font color='{ORANGE}'>{warns} warnings</font>"
-        )
-
+        self._refresh_stats()
+        opts_list = load_cleaning_options()
+        opts = sum(1 for b in subtitle.blocks
+                   if b.regex_matches < t
+                   and block_will_be_removed(b.content, opts_list)
+                   ) if opts_list.any_enabled() else 0
         self._populate_block_list(subtitle)
         self._btn_clean_all.setEnabled(True)
+        status_parts = [f"{ads} ad block(s) found, {warns} warning(s)"]
+        if opts:
+            status_parts.append(f"{opts} opt(s)")
         self._status.showMessage(
-            f"Analysis complete — {ads} ad block(s) found, {warns} warning(s)"
+            f"Analysis complete — {', '.join(status_parts)}"
         )
 
         # Mark file in queue — color only, no stale count badges
+        _opts_list = load_cleaning_options()
+        _opts = sum(1 for b in subtitle.blocks
+                    if b.regex_matches < t
+                    and block_will_be_removed(b.content, _opts_list)
+                    ) if _opts_list.any_enabled() else 0
         for i in range(self._file_list.count()):
             item = self._file_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == subtitle.path:
@@ -820,6 +876,8 @@ class MainWindow(QMainWindow):
                     item.setForeground(QColor(RED))
                 elif warns > 0:
                     item.setForeground(QColor(ORANGE))
+                elif _opts > 0:
+                    item.setForeground(QColor(ACCENT))
                 else:
                     item.setForeground(QColor(GREEN))
                 item.setText(subtitle.path.name)
@@ -915,10 +973,18 @@ class MainWindow(QMainWindow):
         ads   = sum(1 for b in self._subtitle.blocks if b.regex_matches >= t)
         warns = sum(1 for b in self._subtitle.blocks
                     if b.regex_matches == t - 1 and t > 1)
-        self._lbl_stats.setText(
-            f"<font color='{RED}'>{ads} ads</font>  "
-            f"<font color='{ORANGE}'>{warns} warnings</font>"
-        )
+        opts_list = load_cleaning_options()
+        opts  = sum(1 for b in self._subtitle.blocks
+                    if b.regex_matches < t
+                    and block_will_be_removed(b.content, opts_list)
+                    ) if opts_list.any_enabled() else 0
+        parts = [
+            f"<font color='{RED}'>{ads} ads</font>",
+            f"<font color='{ORANGE}'>{warns} warnings</font>",
+        ]
+        if opts:
+            parts.append(f"<font color='{ACCENT}'>{opts} opts</font>")
+        self._lbl_stats.setText("  ".join(parts))
 
     # ── Save ──────────────────────────────────────────────────────────────
 
@@ -962,6 +1028,13 @@ class MainWindow(QMainWindow):
                                   if id(b) not in remove_set]
         for i, b in enumerate(self._subtitle.blocks, 1):
             b.current_index = i
+
+        # Apply global cleaning options
+        opts = load_cleaning_options()
+        if opts.any_enabled():
+            _, cleaning_report = apply_cleaning_options(self._subtitle, opts)
+            if cleaning_report.any_changes:
+                self._append_cleaning_report(cleaning_report)
 
         try:
             write_subtitle(self._subtitle)
@@ -1092,13 +1165,29 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Update Check Failed", err_msg)
         self._status.showMessage("Update check failed.")
 
+    def _append_cleaning_report(self, report):
+        from core.cleaner_options import CleaningReport
+        lines = ["", "── Cleaning Options Applied ──────────────────────────"]
+        if report.removals():
+            lines.append(f"Removed {len(report.removals())} block(s):")
+            for a in report.removals():
+                lines.append(f"  [{a.timestamp}]  {a.reason}  —  {a.original}")
+        if report.modifications():
+            lines.append(f"Modified {len(report.modifications())} block(s):")
+            for a in report.modifications():
+                lines.append(f"  [{a.timestamp}]  {a.reason}  —  {a.original}")
+        if report.duplicates_merged:
+            lines.append(f"Merged {report.duplicates_merged} duplicate cue(s).")
+        self._report_text.append("\n".join(lines))
+
     # ── Report tab ────────────────────────────────────────────────────────
 
     def _update_report(self):
         if not self._subtitle:
             return
         from core.cleaner import generate_report
-        self._report_text.setText(generate_report(self._subtitle))
+        opts = load_cleaning_options()
+        self._report_text.setText(generate_report(self._subtitle, opts))
 
 
 # ---------------------------------------------------------------------------
