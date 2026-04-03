@@ -504,9 +504,16 @@ def clean(subtitle: ParsedSubtitle, dry_run: bool = False,
     return subtitle, removed
 
 
-def generate_report(subtitle: ParsedSubtitle) -> str:
+def generate_report(subtitle: ParsedSubtitle, cleaning_options=None) -> str:
+    from .cleaner_options import block_will_be_removed
     ad_blocks   = [b for b in subtitle.blocks if b.is_ad]
     warn_blocks = [b for b in subtitle.blocks if b.is_warning]
+    clean_opt_blocks = []
+    if cleaning_options and cleaning_options.any_enabled():
+        clean_opt_blocks = [
+            b for b in subtitle.blocks
+            if not b.is_ad and block_will_be_removed(b.content, cleaning_options)
+        ]
     lines = [
         f"File:     {subtitle.path.name}",
         f"Format:   {subtitle.fmt.value.upper()}",
@@ -515,6 +522,8 @@ def generate_report(subtitle: ParsedSubtitle) -> str:
         f"Ads:      {len(ad_blocks)} flagged for removal",
         f"Warnings: {len(warn_blocks)} flagged as warnings",
     ]
+    if clean_opt_blocks:
+        lines.append(f"Cleaning: {len(clean_opt_blocks)} block(s) removed by cleaning options")
     if ad_blocks:
         lines.append("\nAd blocks:")
         for b in ad_blocks:
@@ -523,6 +532,11 @@ def generate_report(subtitle: ParsedSubtitle) -> str:
                          f"{b.content[:80].replace(chr(10), ' ')}")
             if reasons:
                 lines.append(f"    reasons: {reasons}")
+    if clean_opt_blocks:
+        lines.append("\nRemoved by cleaning options:")
+        for b in clean_opt_blocks:
+            lines.append(f"  [{timedelta_to_srt(b.start_time)}]  "
+                         f"{b.content[:80].replace(chr(10), ' ')}")
     if warn_blocks:
         lines.append("\nWarning blocks:")
         for b in warn_blocks:

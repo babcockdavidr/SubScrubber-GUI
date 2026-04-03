@@ -11,7 +11,7 @@ import urllib.request
 import json
 from typing import Optional, Tuple
 
-CURRENT_VERSION = "v0.6.0"
+CURRENT_VERSION = "v0.7.0"
 GITHUB_API_URL  = "https://api.github.com/repos/babcockdavidr/SubScrubber-GUI/releases/latest"
 RELEASES_URL    = "https://github.com/babcockdavidr/SubScrubber-GUI/releases"
 

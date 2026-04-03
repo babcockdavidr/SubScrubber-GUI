@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from .ffprobe import SubtitleTrack, TEXT_CODEC_EXT, _find_ffmpeg
+from .cleaner_options import language_display_name
 from .subtitle import load_subtitle, write_subtitle
 from .cleaner import clean as cleaner_clean
 
@@ -317,8 +318,10 @@ def remux_with_cleaned_tracks(
             if t.language and t.language != "und":
                 cmd += ["--language", f"0:{t.language}"]
 
-            if t.title:
-                cmd += ["--track-name", f"0:{t.title}"]
+            # Normalize track title to language name only — strips encoder credits
+            clean_title = language_display_name(t.language) if t.language else t.title
+            if clean_title:
+                cmd += ["--track-name", f"0:{clean_title}"]
 
             # Forced / default flags
             cmd += ["--forced-display-flag", f"0:{'1' if t.forced else '0'}"]
@@ -497,8 +500,10 @@ def remux_mp4_with_ffmpeg(
             t = ct.track
             if t.language and t.language != "und":
                 cmd += [f"-metadata:s:s:{out_sub_idx}", f"language={t.language}"]
-            if t.title:
-                cmd += [f"-metadata:s:s:{out_sub_idx}", f"title={t.title}"]
+            # Normalize track title to language name only — strips encoder credits
+            clean_title = language_display_name(t.language) if t.language else t.title
+            if clean_title:
+                cmd += [f"-metadata:s:s:{out_sub_idx}", f"title={clean_title}"]
             # Disposition flags
             disposition = []
             if t.default: disposition.append("default")

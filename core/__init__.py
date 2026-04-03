@@ -1,5 +1,9 @@
 from .subtitle import load_subtitle, write_subtitle, detect_format, SUPPORTED_EXTENSIONS
 from .cleaner import analyze, clean, generate_report
+from .cleaner_options import (
+    CleaningOptions, CleaningAction, CleaningReport,
+    apply_cleaning_options, language_display_name, block_will_be_removed,
+)
 from .batch import collect_files, run_batch, save_batch, BatchResult, FileResult
 from .ffprobe import (
     scan_video, collect_video_files, probe_video,

@@ -31,6 +31,7 @@ class FileResult:
     total_blocks: int = 0
     error: str = ""
     saved: bool = False
+    cleaning_report: object = None  # CleaningReport if cleaning options were applied
 
     @property
     def ok(self) -> bool:
