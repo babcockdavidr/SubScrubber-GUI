@@ -1,5 +1,5 @@
 SubScrubber — Development Roadmap
-Last updated: v0.6.0
+Last updated: v0.7.0 (complete)
 ================================================================================
 
 COMPLETED
@@ -27,68 +27,49 @@ v0.6.0 — Interface Overhaul
   - Video Scan folder label shows selected path after Add Folder
   - Extract & Save filename format: [video stem].[lang].[ext], SDH auto-detected
   - File queue shows color only (no stale count badges that don't reflect slider)
-  - Toolbar gap fixed (padding-right removed from SUBSCRUBBER label)
+  - Toolbar gap fixed
   - Button height consistency fixed across all tabs
   - MKVToolNix notice updated to reflect MP4 support without mkvmerge
 
-
-IN PROGRESS
---------------------------------------------------------------------------------
 v0.7.0 — Subtitle Cleaning Options
-
-  Phase 1 (core logic) — new file: core/cleaner_options.py
-    - apply_cleaning_options(subtitle, options) — operates on block content,
-      not block existence (different from ad detection engine)
-    - strip_music_cues(block) — lines entirely of ♪/♫ or music symbols
-    - strip_sdh_annotations(block) — [ALL CAPS IN BRACKETS] / (All Caps Parens)
-      convention that distinguishes sound FX from normal dialogue
-    - strip_speaker_labels(block) — WORD: or - WORD: at line start (all caps)
-    - strip_formatting_tags(block, preserve_italic, preserve_bold)
-    - strip_between_brackets(block, types) — individual toggles for {} [] () * #
-    - normalize_case(block) — sentence case per line
-    - merge_duplicate_cues(subtitle) — collapse consecutive identical blocks
-      after other cleaning is applied
-
-  Phase 2 (UI) — changes to gui/app.py and gui/batch_panel.py
-    - Collapsible "Cleaning Options" panel in Single File tab below sensitivity slider
-    - Same panel in Batch tab
-    - Checkboxes with sub-options indented under parent (matching reference screenshot)
-    - SDH removal gets visible accessibility warning label
-    - Options apply at clean time, not scan time
-    - Preview mode shows selected block after cleaning options applied
-
-  Notes:
-    - These are content modification features, NOT block removal features
-    - SDH warning: "Removing SDH content reduces accessibility for deaf and
-      hard of hearing viewers"
-
+  - core/cleaner_options.py — full content cleaning engine
+  - Track title normalization on remux (encoder credits stripped, always on)
+  - Global Settings dialog: Cleaning Options + Paths tabs, persists to settings.json
+  - Settings button (⚙) top-right of toolbar
+  - CLEAN OPT blue indicators in Single File, Batch, and Video Scan
+  - Opts count in Single File bottom bar
+  - Batch slider preserves detail view when moved
+  - Opts-only tracks selectable in Video Scan
+  - Cleaning actions shown in reports after save
 
 PLANNED
 --------------------------------------------------------------------------------
-v0.8.0 — Settings & Persistence
-  - Unified Settings dialog from toolbar button (NOT a tab)
-  - Internal sub-tabs: General, Paths, About
-  - General: default sensitivity (Single File and Batch separately),
-    default cleaning options state, theme toggle, font size
-  - Paths: mkvmerge path moves here from Video Scan tab
-    (Video Scan Settings button removed)
-  - About: version, KBlixt credit + link, GitHub link, MIT license,
-    Report an Issue button (opens GitHub Issues in browser)
-  - Check for Updates stays in status bar unchanged — DO NOT MOVE
-  - All settings persist to settings.json
-  - Cleaning option defaults from v0.7.0 now persist via Settings
+v0.8.0 — Settings Expansion & Polish
+  - App rename to SubForge confirmed for v0.8.0
+  - About tab in Settings dialog:
+      version, KBlixt credit + link, GitHub link, MIT license,
+      Report an Issue button (opens GitHub Issues in browser)
   - Column sort on Batch (name, ad count, warning count, file size)
   - String extraction — all user-facing strings to strings.py
-  - Language selector in General (English only, others "coming soon")
+  - Language selector in Settings General tab (English only initially,
+    others "coming soon")
+  - Cleaning actions shown in file report (Single File and Batch)
+    so users know exactly what content was modified beyond ad removal
+  - General tab in Settings:
+      default sensitivity level (Single File and Batch separately)
+      theme toggle placeholder (dark/light — not yet implemented)
+      font size placeholder (not yet implemented)
 
 v0.9.0 — Packaging & Distribution
   - PyInstaller: Windows .exe and macOS .app
   - Linux AppImage
   - GitHub Actions workflow — auto-build and attach executables on new tag
+    (one source, all platforms built automatically — solves multi-exe
+    update problem since Check for Updates already just links to releases)
   - Optional Windows installer (Inno Setup) — Program Files, Start Menu,
     file associations for .srt/.ass/.vtt
-  - First-run setup wizard — detects FFmpeg and MKVToolNix, shows status,
-    offers download links. Replaces current scattered warning banners
+  - First-run setup wizard — detects FFmpeg and MKVToolNix on PATH,
+    shows status, offers download links. Replaces current warning banners.
   - Session memory — last Batch folder, last Video Scan folder,
     window size/position persisted across restarts
   - Drag video onto Single File tab — detect subtitle streams, offer to
@@ -101,36 +82,79 @@ v1.0.0 — Accessibility, Polish & Release
   - Screen reader compatibility — setAccessibleName/setAccessibleDescription
     on all major widgets (Windows Narrator, macOS VoiceOver)
   - Tooltip audit — every button has one
-  - First translation — Spanish (detection profiles already exist,
-    good proof of string system)
+  - First translation — Spanish (detection profiles already exist)
   - CHANGELOG.md in repo, linked from About dialog
   - GitHub Pages documentation site from README with tab screenshots
   - File association on macOS
   - Full test pass: Windows, macOS, Linux
   - Release candidate period before tagging 1.0.0
   - Final branding pass — every string, label, tooltip reviewed
+  - Possible app rename (SubForge under discussion)
 
 
-POST-1.0 STRETCH GOALS (noted, not planned)
+POST-1.0 — FUTURE FEATURES
 --------------------------------------------------------------------------------
-  - Android via BeeWare
-  - Second language translation (French, Dutch — profiles already exist)
-  - OCR for image-based subtitles (PGS/VOBSUB via Tesseract)
-  - Subtitle format conversion (SRT ↔ ASS etc.)
-  - Auto-update (download and apply in-app — security implications to review)
-  - Plugin system (user-written detection logic beyond regex)
+These are real planned features, not wishlist items. Priority order TBD.
+
+  AI-ASSISTED SUBTITLE GENERATION (v1.x or v2.0)
+  - Whisper AI integration for local, offline subtitle generation
+      - Whisper runs entirely on-device — no cloud, no API keys,
+        consistent with SubScrubber's fully local philosophy
+      - User points at a video file, Whisper transcribes audio to
+        subtitle blocks, SubScrubber's cleaning engine runs on output
+      - SDH mode: generate with sound descriptions and speaker labels
+        for deaf and hard of hearing viewers — the accessibility angle
+        that no other desktop subtitle tool currently does well
+      - Export directly as .srt/.ass or remux back into the video
+      - This would make SubScrubber the only tool that both generates
+        AND cleans subtitles in one local application
+  - Model selection (Whisper tiny/base/small/medium/large) with speed
+    vs accuracy tradeoff explained in plain language
+  - Language detection or manual language selection for transcription
+
+  SUBTITLE FORMAT CONVERSION
+  - SRT ↔ ASS ↔ VTT conversion within the app
+  - Batch format conversion across a library folder
+
+  ADDITIONAL TRANSLATIONS
+  - French, Dutch (detection profiles already exist — good candidates)
+  - Community contribution system via GitHub for additional languages
+
+  OCR FOR IMAGE-BASED SUBTITLES
+  - PGS/VOBSUB scan support via Tesseract
+  - Complex dependency but would close the only remaining gap in
+    Video Scan (image tracks currently listed but unscannable)
+
+  ANDROID
+  - BeeWare/Briefcase port
+  - Genuinely complex, not a near-term priority
+
+  AUTO-UPDATE
+  - Download and apply updates in-app rather than linking to releases
+  - Security implications need careful review before implementing
+
+  PLUGIN SYSTEM
+  - User-written detection logic in Python beyond regex
+  - For edge cases the regex engine cannot handle
 
 
 DECISIONS & STANDING RULES
 --------------------------------------------------------------------------------
   - Check for Updates stays in status bar. Opt-in and visible. Non-negotiable.
-  - Settings is a dialog, NOT a tab alongside real features.
+  - Settings is a dialog opened from toolbar button, NOT a tab.
+  - Settings button lives on far right of toolbar (⚙ Settings).
   - No emojis on buttons except the gear icon on Settings.
   - Sensitivity slider recommendations: level 4 for TV, level 5 for movies.
   - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0 etc.)
-  - Remux supports MKV (mkvmerge) and MP4/M4V (ffmpeg). No mkvmerge needed for MP4.
+  - Remux supports MKV (mkvmerge) and MP4/M4V (ffmpeg). No mkvmerge for MP4.
   - Extract & Save filename: [video stem].[lang].[ext] e.g. Movie.eng.srt
     SDH tracks: Movie.eng.sdh.srt
   - File queue in Single File shows color only, no stale count badges.
-  - SubScrubber is an accessibility tool — SDH removal features must carry
-    a visible warning. Never make destructive accessibility options a default.
+  - SubScrubber is an accessibility tool — SDH removal and any feature that
+    degrades the HoH experience must carry a visible warning and must never
+    be enabled by default. Always default to the HoH-friendly option.
+  - Track title normalization during remux is always on — no option.
+    Encoder credits in track titles serve no user and actively hurt
+    HoH users navigating subtitle menus.
+  - Cleaning options are global (settings.json), not per-tab.
+  - mkvmerge path lives in Settings > Paths, not in Video Scan tab.

@@ -1,4 +1,4 @@
-# SubScrubber — v0.6.0: Interface Overhaul
+# SubScrubber — v0.7.0: Subtitle Cleaning Options
 
 **Remove ads, watermarks, and distributor junk from subtitle files.**
 
@@ -9,6 +9,15 @@ Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt
 ---
 
 ## What's New
+
+### v0.7.0 — Subtitle Cleaning Options
+- **Global Cleaning Options** — a new Settings dialog (⚙ Settings in the toolbar) provides content cleaning options that apply across Single File, Batch, and Video Scan. Options include removing music cues, SDH annotations, speaker labels, formatting tags, bracket content, case normalization, and duplicate cue merging. All options are off by default.
+- **SDH accessibility warning** — the SDH annotation removal option carries a visible warning in Settings, as removing sound descriptions reduces accessibility for deaf and hard of hearing viewers. It is never a default.
+- **CLEAN OPT indicators** — blocks that will be removed by cleaning options appear in blue throughout the interface: `✕ OPT` in the Single File block list, `CLEAN OPT` with a blue border in Batch and Video Scan reports, and blue file/track labels in the left panels.
+- **Opts count in status bar** — the bottom bar now shows ads, warnings, and opts counts separately so you always know what will be touched before saving.
+- **Track title normalization** — during any remux operation (MKV or MP4), embedded subtitle track titles are automatically normalized to the clean language name. "English - Encoded by Jackass" becomes "English". No option, always applied.
+- **Global Settings dialog** — mkvmerge path has moved from the Video Scan tab into Settings > Paths. The Video Scan tab no longer has its own Settings button.
+- **Cleaning actions in reports** — after a clean & save, the FILE REPORT in Single File and the detail pane in Batch show a summary of what cleaning options removed or modified, separate from the ad detection report.
 
 ### v0.6.0 — Interface Overhaul
 - **Single File tab** — the former Review and Report tabs have been merged into one tab renamed Single File. The full file report now appears in a pane below the block detail, eliminating the need to switch tabs to see why a block was flagged.
@@ -83,7 +92,7 @@ python subscrubber.py movie.en.srt
 
 ## GUI Overview
 
-The main window has four tabs: **Single File**, **Batch**, **Video Scan**, and **Regex Editor**. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
+The main window has four tabs: **Single File**, **Batch**, **Video Scan**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
 
 ---
 
@@ -138,8 +147,12 @@ For cleaning an entire media library in one pass, including libraries where each
 **Workflow:**
 1. Click **Select Base Folder** and choose your top-level movies or shows folder — SubScrubber walks all subfolders recursively and counts every subtitle file it finds
 2. Click **Scan All** — all files are analysed in a background thread with a live progress bar
-3. Results appear in the file list, colour-coded red / orange / green. Each row shows `MovieFolder/subtitle.srt` so you can see which film each file belongs to at a glance
-4. Click any file in the list to see a detailed report on the right — ad blocks appear with a red left border and pink text, warnings with an orange border, timestamps in blue, and reason tags in grey below each block. Click **Keep — not an ad** on any block to exclude it from cleaning. Click **Show Full Report** at any time to return to the full batch summary
+3. Results appear in the file list, colour-coded by status. Each row shows `MovieFolder/subtitle.srt` so you can see which film each file belongs to at a glance:
+   - **Red** `[ N ads ]` — detection engine flagged blocks for removal
+   - **Orange** `[ N warns ]` — detection engine flagged warnings
+   - **Blue** `[ N opts ]` — clean from detection, but active Cleaning Options settings will modify or remove content in this file
+   - **Green** `[ clean ]` — nothing will be touched
+4. Click any file in the list to see a detailed report on the right — ad blocks appear with a red left border and pink text, `CLEAN OPT` blocks (flagged by Cleaning Options settings) appear with the same red styling, warnings with an orange border, timestamps in blue, and reason tags in grey below each block. Click **Keep — not an ad** on any block to exclude it from cleaning. Click **Show Full Report** at any time to return to the full batch summary
 5. Use the **Sensitivity slider** (1–5) to control how aggressively blocks are flagged. Moving it instantly re-colours all rows without rescanning:
    - **1 — Very Aggressive**: catches almost everything, higher false-positive risk
    - **2 — Aggressive**: catches most ad patterns plus borderline cases
@@ -372,4 +385,24 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 ---
 
-*SubScrubber v0.6.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+## Roadmap
+
+SubScrubber is under active development. Here is what is coming next.
+
+**v0.8.0 — Settings Expansion**
+About dialog with credits and issue reporting. Column sort on Batch. Default sensitivity preferences. Cleaning actions shown in the file report.
+
+**v0.9.0 — Packaging & Distribution**
+Standalone executables for Windows, macOS, and Linux via PyInstaller and GitHub Actions. First-run setup wizard. Session memory.
+
+**v1.0.0 — Accessibility & Release**
+Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. First translation (Spanish). Full cross-platform test pass.
+
+**Future**
+Local AI subtitle generation via Whisper — transcribe audio to subtitles entirely on-device, with SDH mode for deaf and hard of hearing viewers. Subtitle format conversion. Additional language translations.
+
+The full roadmap is maintained in `ROADMAP.txt` in the repository.
+
+---
+
+*SubScrubber v0.7.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
