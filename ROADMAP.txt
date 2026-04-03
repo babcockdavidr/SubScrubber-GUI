@@ -41,6 +41,7 @@ v0.7.0 — Subtitle Cleaning Options
   - Batch slider preserves detail view when moved
   - Opts-only tracks selectable in Video Scan
   - Cleaning actions shown in reports after save
+  - File queue selection highlight fixed (neutral color, not status color)
 
 PLANNED
 --------------------------------------------------------------------------------
@@ -53,8 +54,6 @@ v0.8.0 — Settings Expansion & Polish
   - String extraction — all user-facing strings to strings.py
   - Language selector in Settings General tab (English only initially,
     others "coming soon")
-  - Cleaning actions shown in file report (Single File and Batch)
-    so users know exactly what content was modified beyond ad removal
   - General tab in Settings:
       default sensitivity level (Single File and Batch separately)
       theme toggle placeholder (dark/light — not yet implemented)
@@ -89,7 +88,6 @@ v1.0.0 — Accessibility, Polish & Release
   - Full test pass: Windows, macOS, Linux
   - Release candidate period before tagging 1.0.0
   - Final branding pass — every string, label, tooltip reviewed
-  - Possible app rename (SubForge under discussion)
 
 
 POST-1.0 — FUTURE FEATURES
