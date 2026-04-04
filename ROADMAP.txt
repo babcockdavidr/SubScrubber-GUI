@@ -1,5 +1,5 @@
-SubScrubber — Development Roadmap
-Last updated: v0.7.0 (complete)
+SubForge — Development Roadmap
+Last updated: v0.8.0 (complete)
 ================================================================================
 
 COMPLETED
@@ -43,23 +43,31 @@ v0.7.0 — Subtitle Cleaning Options
   - Cleaning actions shown in reports after save
   - File queue selection highlight fixed (neutral color, not status color)
 
+v0.8.0 — Settings Expansion & Polish
+  - App renamed to SubForge; entry point subforge.py; GitHub repo updated in updater.py
+  - About tab in Settings: primary credit David R. Babcock, GitHub link, MIT license,
+    Report an Issue button, KBlixt/subcleaner secondary credit
+  - General tab in Settings: default sensitivity (global, all tabs), language selector
+    (English + Spanish; additional languages via dropdown), Coming in v1.0.0 placeholders
+  - String extraction: all Qt widget strings moved to gui/strings.py (flat dict)
+    HTML report strings deferred to v0.9.0
+  - Spanish translation: full STRINGS_ES dictionary, language persists to settings.json,
+    restart prompt appears when language changes with one-click restart via os.execv
+  - Column sort on Batch: QTableWidget with File/Ads/Opts/Warns columns,
+    clickable headers, numeric sort, row colors preserved
+  - Threshold labels unified across all tabs (removed rm≥N and TV/Movies annotations)
+  - Sensitivity slider default now user-configurable in Settings General tab
+  - Updater error dialog distinguishes 404 from network failure
+  - Translation fallback: missing keys fall back to English, then show a
+    visible placeholder directing user to Report an Issue
+
 PLANNED
 --------------------------------------------------------------------------------
-v0.8.0 — Settings Expansion & Polish
-  - App rename to SubForge confirmed for v0.8.0
-  - About tab in Settings dialog:
-      version, KBlixt credit + link, GitHub link, MIT license,
-      Report an Issue button (opens GitHub Issues in browser)
-  - Column sort on Batch (name, ad count, warning count, file size)
-  - String extraction — all user-facing strings to strings.py
-  - Language selector in Settings General tab (English only initially,
-    others "coming soon")
-  - General tab in Settings:
-      default sensitivity level (Single File and Batch separately)
-      theme toggle placeholder (dark/light — not yet implemented)
-      font size placeholder (not yet implemented)
+(v0.8.0 complete — see COMPLETED)
 
 v0.9.0 — Packaging & Distribution
+  - HTML report string extraction — Batch and Video Scan HTML report templates
+    moved into strings.py (deferred from 0.8.0); Spanish translations added there too
   - PyInstaller: Windows .exe and macOS .app
   - Linux AppImage
   - GitHub Actions workflow — auto-build and attach executables on new tag
@@ -69,6 +77,10 @@ v0.9.0 — Packaging & Distribution
     file associations for .srt/.ass/.vtt
   - First-run setup wizard — detects FFmpeg and MKVToolNix on PATH,
     shows status, offers download links. Replaces current warning banners.
+  - Language restart — after changing language in Settings, a "Restart now" button
+    appears that calls os.execv to relaunch the process instantly with the new language
+    applied across all widgets without manual restart
+    (stretch goal: suppress QThreadStorage warnings on Windows during restart)
   - Session memory — last Batch folder, last Video Scan folder,
     window size/position persisted across restarts
   - Drag video onto Single File tab — detect subtitle streams, offer to
@@ -81,7 +93,7 @@ v1.0.0 — Accessibility, Polish & Release
   - Screen reader compatibility — setAccessibleName/setAccessibleDescription
     on all major widgets (Windows Narrator, macOS VoiceOver)
   - Tooltip audit — every button has one
-  - First translation — Spanish (detection profiles already exist)
+  - Additional translations — French, Dutch (detection profiles already exist)
   - CHANGELOG.md in repo, linked from About dialog
   - GitHub Pages documentation site from README with tab screenshots
   - File association on macOS
@@ -97,14 +109,14 @@ These are real planned features, not wishlist items. Priority order TBD.
   AI-ASSISTED SUBTITLE GENERATION (v1.x or v2.0)
   - Whisper AI integration for local, offline subtitle generation
       - Whisper runs entirely on-device — no cloud, no API keys,
-        consistent with SubScrubber's fully local philosophy
+        consistent with SubForge's fully local philosophy
       - User points at a video file, Whisper transcribes audio to
-        subtitle blocks, SubScrubber's cleaning engine runs on output
+        subtitle blocks, SubForge's cleaning engine runs on output
       - SDH mode: generate with sound descriptions and speaker labels
         for deaf and hard of hearing viewers — the accessibility angle
         that no other desktop subtitle tool currently does well
       - Export directly as .srt/.ass or remux back into the video
-      - This would make SubScrubber the only tool that both generates
+      - This would make SubForge the only tool that both generates
         AND cleans subtitles in one local application
   - Model selection (Whisper tiny/base/small/medium/large) with speed
     vs accuracy tradeoff explained in plain language
@@ -115,8 +127,7 @@ These are real planned features, not wishlist items. Priority order TBD.
   - Batch format conversion across a library folder
 
   ADDITIONAL TRANSLATIONS
-  - French, Dutch (detection profiles already exist — good candidates)
-  - Community contribution system via GitHub for additional languages
+  - Community contribution system via GitHub for additional languages beyond French/Dutch
 
   OCR FOR IMAGE-BASED SUBTITLES
   - PGS/VOBSUB scan support via Tesseract
@@ -142,13 +153,13 @@ DECISIONS & STANDING RULES
   - Settings is a dialog opened from toolbar button, NOT a tab.
   - Settings button lives on far right of toolbar (⚙ Settings).
   - No emojis on buttons except the gear icon on Settings.
-  - Sensitivity slider recommendations: level 4 for TV, level 5 for movies.
+  - Sensitivity slider: no recommendations made — user-judgment based. Default configurable in Settings.
   - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0 etc.)
   - Remux supports MKV (mkvmerge) and MP4/M4V (ffmpeg). No mkvmerge for MP4.
   - Extract & Save filename: [video stem].[lang].[ext] e.g. Movie.eng.srt
     SDH tracks: Movie.eng.sdh.srt
   - File queue in Single File shows color only, no stale count badges.
-  - SubScrubber is an accessibility tool — SDH removal and any feature that
+  - SubForge is an accessibility tool — SDH removal and any feature that
     degrades the HoH experience must carry a visible warning and must never
     be enabled by default. Always default to the HoH-friendly option.
   - Track title normalization during remux is always on — no option.

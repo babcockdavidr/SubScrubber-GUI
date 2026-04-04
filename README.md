@@ -1,14 +1,25 @@
-# SubScrubber — v0.7.0: Subtitle Cleaning Options
+# SubForge — v0.8.0: Settings Expansion
 
 **Remove ads, watermarks, and distributor junk from subtitle files.**
 
-SubScrubber is the ultimate, cross-platform, GUI-enabled, multi-format subtitle cleaning tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` `.mp4` and more
+SubForge is the ultimate, cross-platform, GUI-enabled, multi-format subtitle cleaning tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` `.mp4` and more
 
 Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt/subcleaner), extended with multi-format support, a full GUI, batch processing, embedded subtitle scanning, MKVToolNix integration, MP4 remuxing, and an in-app regex profile editor.
 
 ---
 
 ## What's New
+
+### v0.8.0 — Settings Expansion & Polish
+- **App renamed to SubForge** — the app is now SubForge. Entry point is `subforge.py`, GitHub repository is `babcockdavidr/SubForge`, and all internal references are updated.
+- **Settings dialog expanded** — the Settings dialog now has four tabs: General, Cleaning Options, Paths, and About.
+- **General tab** — set your default sensitivity level once and it applies across Single File, Batch, and Video Scan on every launch. Changing it in Settings updates all three sliders immediately.
+- **Language support** — SubForge now ships in English and Spanish. Select your language in Settings > General. A one-click restart prompt applies the change.
+- **About tab** — version number, creator credit, GitHub link, MIT license, and a Report an Issue button that opens GitHub Issues directly.
+- **String extraction** — all user-facing strings live in `gui/strings.py`. Adding a new language requires only a new dictionary in that file. Missing translation keys fall back to English automatically, with a visible placeholder if the key is missing from English too.
+- **Column sort on Batch** — the scanned files list is now a proper table with File, Ads, Opts, and Warns columns. Click any column header to sort. Numeric columns sort numerically.
+- **Threshold labels unified** — sensitivity labels are now identical across all three tabs. The old `rm≥N` annotations and TV/Movies recommendations are gone.
+- **Updater improved** — the Check for Updates error dialog now distinguishes between a network failure and a 404 (no releases published yet), with a cleaner message for each.
 
 ### v0.7.0 — Subtitle Cleaning Options
 - **Global Cleaning Options** — a new Settings dialog (⚙ Settings in the toolbar) provides content cleaning options that apply across Single File, Batch, and Video Scan. Options include removing music cues, SDH annotations, speaker labels, formatting tags, bracket content, case normalization, and duplicate cue merging. All options are off by default.
@@ -36,25 +47,25 @@ Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt
 
 ---
 
-## Why SubScrubber
+## Why SubForge
 
-Subtitle files downloaded from the internet are frequently polluted with ads, distributor watermarks, credit lines, website URLs, and promotional text embedded directly into the subtitle stream. These can range from harmless to extremely inappropriate. SubScrubber is the ultimate answer to this problem. SubScrubber gets rid of them all in an easy-to-use, all-in-one package.
+Subtitle files downloaded from the internet are frequently polluted with ads, distributor watermarks, credit lines, website URLs, and promotional text embedded directly into the subtitle stream. These can range from harmless to extremely inappropriate. SubForge is the ultimate answer to this problem. SubForge gets rid of them all in an easy-to-use, all-in-one package.
 
-### What makes SubScrubber different
+### What makes SubForge different
 
-**Compared to manual editing:** Finding and removing these blocks by hand in a text editor across hundreds or thousands of files is tedious and error-prone. SubScrubber automates detection across entire libraries in seconds.
+**Compared to manual editing:** Finding and removing these blocks by hand in a text editor across hundreds or thousands of files is tedious and error-prone. SubForge automates detection across entire libraries in seconds.
 
-**Compared to the original subcleaner:** SubScrubber extends subcleaner's detection engine with a full graphical interface, multi-format support (subcleaner only handles `.srt`), batch processing with a sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix-based remuxing, an in-app regex editor, and is fully cross-platform compatible. Everything subcleaner does from the command line, SubScrubber does with a GUI (plus so much more).
+**Compared to the original subcleaner:** SubForge extends subcleaner's detection engine with a full graphical interface, multi-format support (subcleaner only handles `.srt`), batch processing with a sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix-based remuxing, an in-app regex editor, and is fully cross-platform compatible. Everything subcleaner does from the command line, SubForge does with a GUI (plus so much more).
 
-**Compared to online subtitle cleaners:** Online tools require uploading your subtitle files to a third-party server. SubScrubber runs entirely on your own machine. No files ever leave your computer. No accounts. No internet connection required at any point during use. No ads. To this author's knowledge, there are no online subtitle cleaners that support recursive folder search uploads, additional filetypes beyond `.srt`, and cleaning embedded subtitles, all of which SubScrubber excels at.
+**Compared to online subtitle cleaners:** Online tools require uploading your subtitle files to a third-party server. SubForge runs entirely on your own machine. No files ever leave your computer. No accounts. No internet connection required at any point during use. No ads. To this author's knowledge, there are no online subtitle cleaners that support recursive folder search uploads, additional filetypes beyond `.srt`, and cleaning embedded subtitles, all of which SubForge excels at.
 
 ### Key properties
 
-- **Fully local** — zero network calls, zero telemetry, zero data collection. SubScrubber never contacts any server for any reason. The only optional exception is the opt-in Check for Updates button.
-- **Cross-platform** — written entirely in Python and PyQt6, SubScrubber runs on Windows, macOS, and Linux without modification. The same code, the same interface, everywhere.
+- **Fully local** — zero network calls, zero telemetry, zero data collection. SubForge never contacts any server for any reason. The only optional exception is the opt-in Check for Updates button.
+- **Cross-platform** — written entirely in Python and PyQt6, SubForge runs on Windows, macOS, and Linux without modification. The same code, the same interface, everywhere.
 - **Open source** — every line of code is visible and auditable. The detection patterns are plain text `.conf` files you can read, edit, and extend yourself.
-- **No subscription, no license, no expiry** — SubScrubber is free software. There is no paid tier, no feature gating, and no nag screens.
-- **Non-destructive by default** — SubScrubber asks for confirmation before writing any file. Remux operations create a backup file by default before overwriting. Dry-run mode lets you preview exactly what would be removed without touching anything.
+- **No subscription, no license, no expiry** — SubForge is free software. There is no paid tier, no feature gating, and no nag screens.
+- **Non-destructive by default** — SubForge asks for confirmation before writing any file. Remux operations create a backup file by default before overwriting. Dry-run mode lets you preview exactly what would be removed without touching anything.
 - **Scriptable** — the full CLI is available for automation, cron jobs, and integration with other tools, with no GUI dependency.
 
 ---
@@ -75,17 +86,17 @@ pip install -r requirements.txt
 
 ## Launching
 
-Navigate to the SubScrubber base folder in your CLI or right-click on the File Explorer background inside the application folder where `subscrubber.py` exists and select `Open in Terminal`, then type:
+Navigate to the SubForge folder in your CLI or right-click inside the application folder and select `Open in Terminal`, then type:
 
 ```bash
 # Open the GUI
-python subscrubber.py --gui
+python subforge.py --gui
 
 # Open the GUI with a file pre-loaded
-python subscrubber.py movie.en.srt --gui
+python subforge.py movie.en.srt --gui
 
 # CLI only — no GUI needed
-python subscrubber.py movie.en.srt
+python subforge.py movie.en.srt
 ```
 
 ---
@@ -119,7 +130,7 @@ For loading, inspecting, and cleaning individual subtitle files.
 
 ## Always Mark as Ad (Add Pattern Dialog)
 
-The **Always Mark as Ad…** button teaches SubScrubber to recognise a pattern permanently, so it is automatically flagged in every future file — not just the current one.
+The **Always Mark as Ad…** button teaches SubForge to recognise a pattern permanently, so it is automatically flagged in every future file — not just the current one.
 
 ![Always Mark as Add dialog](images/Add_Pattern_Screenshot.png)
 
@@ -147,7 +158,7 @@ For cleaning an entire media library in one pass, including libraries where each
 ![Batch Tab](images/Batch_Screenshot.png)
 
 **Workflow:**
-1. Click **Select Base Folder** and choose your top-level movies or shows folder — SubScrubber walks all subfolders recursively and counts every subtitle file it finds
+1. Click **Select Base Folder** and choose your top-level movies or shows folder — SubForge walks all subfolders recursively and counts every subtitle file it finds
 2. Click **Scan All** — all files are analysed in a background thread with a live progress bar
 3. Results appear in the file list, colour-coded by status. Each row shows `MovieFolder/subtitle.srt` so you can see which film each file belongs to at a glance:
    - **Red** `[ N ads ]` — detection engine flagged blocks for removal
@@ -177,7 +188,7 @@ Inspects subtitle tracks embedded directly inside video container files. Useful 
 
 **Workflow:**
 1. Drop video files onto the drop zone, or use **Add Folder** to scan a directory recursively — the selected folder path is shown next to the controls
-2. Click **Scan Videos** — SubScrubber uses `ffprobe` to enumerate all subtitle tracks in each file, then `ffmpeg` to extract each text-based track to a temporary file, then runs the full detection engine on it
+2. Click **Scan Videos** — SubForge uses `ffprobe` to enumerate all subtitle tracks in each file, then `ffmpeg` to extract each text-based track to a temporary file, then runs the full detection engine on it
 3. Results appear as a collapsible tree — each video is a root node, its subtitle tracks are children, colour-coded by status (red = ads found, orange = warnings, green = clean, grey = image-based / unscannable)
 4. Use the **Sensitivity slider** to adjust the detection threshold — the tree and detail pane both update instantly without rescanning
 5. Click any track to see its codec, language, forced/default flags, block counts, and every flagged block with its text and matched patterns
@@ -199,7 +210,7 @@ Both create a backup file by default (`.backup.mkv` or `.backup.mp4`) before ove
 
 ### MKVToolNix Settings
 
-If `mkvmerge` is not on your system PATH, click **Settings** in the Video Scan tab to browse for `mkvmerge.exe` directly. The path is saved to `settings.json` and persists across restarts. SubScrubber also checks the default Windows install location (`C:\Program Files\MKVToolNix\mkvmerge.exe`) automatically.
+If `mkvmerge` is not on your system PATH, click **Settings** in the Video Scan tab to browse for `mkvmerge.exe` directly. The path is saved to `settings.json` and persists across restarts. SubForge also checks the default Windows install location (`C:\Program Files\MKVToolNix\mkvmerge.exe`) automatically.
 
 ---
 
@@ -231,15 +242,15 @@ Click **Reload Engine** at any time to re-read all profiles from disk without sa
 
 ## Check for Updates
 
-Click **Check for Updates** in the status bar at any time. SubScrubber compares the current version against the latest release tag on GitHub and shows a dialog if a newer version is available. Clicking **Open** in that dialog opens the GitHub releases page in your browser — SubScrubber never downloads or installs anything automatically.
+Click **Check for Updates** in the status bar at any time. SubForge compares the current version against the latest release tag on GitHub and shows a dialog if a newer version is available. Clicking **Open** in that dialog opens the GitHub releases page in your browser — SubForge never downloads or installs anything automatically.
 
-This is the only network call SubScrubber ever makes, and only when you explicitly click the button.
+This is the only network call SubForge ever makes, and only when you explicitly click the button.
 
 ---
 
 ## Installing FFmpeg (required for Video Scan and MP4 remux)
 
-FFmpeg is a free, open-source tool that SubScrubber uses to probe and extract subtitle tracks from video files, and to remux MP4 files. It is only needed for the Video Scan tab — everything else works without it.
+FFmpeg is a free, open-source tool that SubForge uses to probe and extract subtitle tracks from video files, and to remux MP4 files. It is only needed for the Video Scan tab — everything else works without it.
 
 ### Step 1 — Download FFmpeg
 
@@ -265,7 +276,7 @@ The `bin\` folder is the one that matters.
 
 ### Step 3 — Add FFmpeg to your PATH
 
-The PATH is the list of folders Windows searches when you run a command. You need to add the `bin\` folder to it so SubScrubber (and any other program) can find `ffmpeg.exe` and `ffprobe.exe`.
+The PATH is the list of folders Windows searches when you run a command. You need to add the `bin\` folder to it so SubForge (and any other program) can find `ffmpeg.exe` and `ffprobe.exe`.
 
 1. Press **Windows + S** and search for **"Edit the system environment variables"** — open it
 2. Click **"Environment Variables…"** at the bottom right
@@ -284,19 +295,19 @@ Open a new PowerShell or Command Prompt window (it must be a new window — exis
 ffprobe -version
 ```
 
-If it prints version information, FFmpeg is on your PATH and SubScrubber's Video Scan tab will work. If you still see "not recognized", double-check the path you entered in Step 3 — it should point to the folder containing `ffmpeg.exe`, not to `ffmpeg.exe` itself.
+If it prints version information, FFmpeg is on your PATH and SubForge's Video Scan tab will work. If you still see "not recognized", double-check the path you entered in Step 3 — it should point to the folder containing `ffmpeg.exe`, not to `ffmpeg.exe` itself.
 
-> You must open a new terminal window after editing PATH. Restarting SubScrubber after adding FFmpeg to PATH is also required.
+> You must open a new terminal window after editing PATH. Restarting SubForge after adding FFmpeg to PATH is also required.
 
 ---
 
 ## Installing MKVToolNix (required for Clean & Remux on MKV files)
 
-MKVToolNix provides `mkvmerge`, which SubScrubber uses to rebuild MKV files with cleaned subtitle tracks replacing the originals. It is not required for MP4 remuxing.
+MKVToolNix provides `mkvmerge`, which SubForge uses to rebuild MKV files with cleaned subtitle tracks replacing the originals. It is not required for MP4 remuxing.
 
-Download from **https://mkvtoolnix.download/** and run the installer. The installer adds `mkvmerge` to your PATH automatically. SubScrubber also checks the default install location (`C:\Program Files\MKVToolNix\`) so it will usually be found even if PATH was not updated.
+Download from **https://mkvtoolnix.download/** and run the installer. The installer adds `mkvmerge` to your PATH automatically. SubForge also checks the default install location (`C:\Program Files\MKVToolNix\`) so it will usually be found even if PATH was not updated.
 
-If SubScrubber still cannot find it, click **Settings** in the Video Scan tab and browse for `mkvmerge.exe` manually.
+If SubForge still cannot find it, click **Settings** in the Video Scan tab and browse for `mkvmerge.exe` manually.
 
 ---
 
@@ -304,36 +315,36 @@ If SubScrubber still cannot find it, click **Settings** in the Video Scan tab an
 
 ```bash
 # Clean a single file (writes in place)
-python subscrubber.py movie.en.srt
+python subforge.py movie.en.srt
 
 # Detect only — print report, do not write anything
-python subscrubber.py movie.en.srt --dry-run
+python subforge.py movie.en.srt --dry-run
 
 # Scan an entire folder recursively, ask before saving
-python subscrubber.py /media/shows -r
+python subforge.py /media/shows -r
 
 # Scan and print report only, never prompt to save
-python subscrubber.py /media/shows -r --report-only
+python subforge.py /media/shows -r --report-only
 
 # Include verbose output (also list clean files)
-python subscrubber.py /media/shows -r --report-only -v
+python subforge.py /media/shows -r --report-only -v
 
 # Only process files tagged with a specific language
-python subscrubber.py /media/shows -r --language en
+python subforge.py /media/shows -r --language en
 
 # Also remove warning-level (uncertain) blocks
-python subscrubber.py movie.en.srt --remove-warnings
+python subforge.py movie.en.srt --remove-warnings
 
 # Skip confirmation prompt (for scripting / automation)
-python subscrubber.py /media/shows -r -y
+python subforge.py /media/shows -r -y
 
 # Scan embedded subtitle tracks inside video files
-python subscrubber.py movie.mkv --scan-video
-python subscrubber.py /media/movies -r --scan-video
+python subforge.py movie.mkv --scan-video
+python subforge.py /media/movies -r --scan-video
 
 # Launch the GUI, optionally pre-loading files
-python subscrubber.py --gui
-python subscrubber.py movie.en.srt --gui
+python subforge.py --gui
+python subforge.py movie.en.srt --gui
 ```
 
 ---
@@ -383,19 +394,19 @@ my_purge2: \b(SomeWatermark|AnotherGroup)\b
 my_warn1: \b(subtitles|captions)\b
 ```
 
-Changes take effect immediately when saved through the Regex Editor tab. If editing files externally, use the **Reload Engine** button or restart SubScrubber.
+Changes take effect immediately when saved through the Regex Editor tab. If editing files externally, use the **Reload Engine** button or restart SubForge.
 
 ---
 
 ## Roadmap
 
-SubScrubber is under active development. Here is what is coming next.
+SubForge is under active development. Here is what is coming next.
 
-**v0.8.0 — Settings Expansion**
-About dialog with credits and issue reporting. Column sort on Batch. Default sensitivity preferences.
+**v0.8.0 — Settings Expansion** *(released)*
+App renamed to SubForge. About tab with creator credit and issue reporting. General tab with default sensitivity and language selector. English and Spanish UI. Column sort on Batch. Full string extraction for future localization.
 
 **v0.9.0 — Packaging & Distribution**
-Standalone executables for Windows, macOS, and Linux via PyInstaller and GitHub Actions. First-run setup wizard. Session memory.
+Standalone executables for Windows, macOS, and Linux via PyInstaller and GitHub Actions. First-run setup wizard. Session memory. HTML report string extraction for full Spanish coverage.
 
 **v1.0.0 — Accessibility & Release**
 Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. First translation (Spanish). Full cross-platform test pass.
@@ -407,4 +418,4 @@ The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubScrubber v0.7.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.8.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
