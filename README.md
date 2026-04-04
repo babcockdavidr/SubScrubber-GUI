@@ -392,7 +392,7 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 SubScrubber is under active development. Here is what is coming next.
 
 **v0.8.0 — Settings Expansion**
-About dialog with credits and issue reporting. Column sort on Batch. Default sensitivity preferences. Cleaning actions shown in the file report.
+About dialog with credits and issue reporting. Column sort on Batch. Default sensitivity preferences.
 
 **v0.9.0 — Packaging & Distribution**
 Standalone executables for Windows, macOS, and Linux via PyInstaller and GitHub Actions. First-run setup wizard. Session memory.
