@@ -1,6 +1,6 @@
 # SubForge — v0.8.0: Settings Expansion
 
-**Remove ads, watermarks, and distributor junk from subtitle files.**
+**Modern Subtitles piss me the fuck off. I made this to help. Remove ads, watermarks, and distributor junk from subtitle files.**
 
 SubForge is the ultimate, cross-platform, GUI-enabled, multi-format subtitle cleaning tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` `.mp4` and more
 
