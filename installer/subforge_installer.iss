@@ -1,1 +1,93 @@
+; subforge_installer.iss
+; Inno Setup installer script for SubForge.
+;
+; Prerequisites:
+;   1. Run PyInstaller first:  python -m PyInstaller subforge.spec
+;   2. Confirm dist\SubForge\SubForge.exe exists
+;   3. Open this file in Inno Setup Compiler and click Build > Compile
+;      (or run: iscc subforge_installer.iss from the repo root)
+;
+; Output:
+;   installer\Output\SubForge-0.9.0-setup.exe
+;
+; Inno Setup download: https://jrsoftware.org/isinfo.php
 
+#define AppName      "SubForge"
+#define AppVersion   "0.9.0"
+#define AppPublisher "David R. Babcock"
+#define AppURL       "https://github.com/babcockdavidr/SubForge"
+#define AppExeName   "SubForge.exe"
+#define DistDir      "..\dist\SubForge"
+
+[Setup]
+AppId={{A7F3C2D1-4B8E-4F9A-B2C3-D4E5F6A7B8C9}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisherURL={#AppURL}
+AppSupportURL={#AppURL}/issues
+AppUpdatesURL={#AppURL}/releases
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+AllowNoIcons=yes
+; installer output location and filename
+OutputDir=Output
+OutputBaseFilename=SubForge-{#AppVersion}-setup
+; compression
+Compression=lzma2/ultra64
+SolidCompression=yes
+; require 64-bit Windows
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+; minimum Windows version: Windows 10
+MinVersion=10.0
+; appearance
+WizardStyle=modern
+SetupMutex=SubForgeSetupMutex
+; require admin for Program Files install
+PrivilegesRequired=admin
+; uninstaller
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon";    Description: "{cm:CreateDesktopIcon}";    GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "fileassoc_srt";  Description: "Associate .srt subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_ass";  Description: "Associate .ass subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_vtt";  Description: "Associate .vtt subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
+
+[Files]
+; Bundle the entire PyInstaller output folder
+Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+; Start Menu shortcut
+Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"
+Name: "{group}\Uninstall {#AppName}";   Filename: "{uninstallexe}"
+; Desktop shortcut (only if task selected)
+Name: "{autodesktop}\{#AppName}";       Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+
+[Registry]
+; .srt file association
+Root: HKLM; Subkey: "Software\Classes\.srt";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_srt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle";               ValueType: string; ValueName: ""; ValueData: "Subtitle File";       Flags: uninsdeletekey;   Tasks: fileassoc_srt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\DefaultIcon";   ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Tasks: fileassoc_srt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_srt
+
+; .ass file association
+Root: HKLM; Subkey: "Software\Classes\.ass";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_ass
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_ass
+
+; .vtt file association
+Root: HKLM; Subkey: "Software\Classes\.vtt";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_vtt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_vtt
+
+[Run]
+; offer to launch SubForge after install
+Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; clean up settings.json left behind in the install folder on uninstall
+Type: files; Name: "{app}\settings.json"
