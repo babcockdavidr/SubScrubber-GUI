@@ -22,14 +22,14 @@ from PyQt6.QtWidgets import (
 
 import sys
 import webbrowser
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path managed by subforge.py entry point — do not insert __file__-relative paths here
 
 from core.cleaner_options import CleaningOptions
 from core.mkvtoolnix import get_mkvmerge_path, set_mkvmerge_path, mkvmerge_available
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .strings import STRINGS
 
-_SETTINGS_FILE = Path(__file__).parent.parent / "settings.json"
+from core.paths import SETTINGS_FILE as _SETTINGS_FILE
 
 
 # ---------------------------------------------------------------------------
@@ -609,7 +609,7 @@ class SettingsDialog(QDialog):
 
         # Offer restart if language changed
         if lang_code != prev_lang:
-            import sys, os
+            import sys, os, subprocess
             from PyQt6.QtWidgets import QMessageBox, QApplication
             btn = QMessageBox.question(
                 None,
@@ -618,11 +618,44 @@ class SettingsDialog(QDialog):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if btn == QMessageBox.StandardButton.Yes:
+                # Frozen bundle: relaunch exe directly.
+                # Source: relaunch via Python interpreter.
+                frozen = getattr(sys, "frozen", False)
+                args = [sys.executable] if frozen else [sys.executable] + sys.argv
+
+                # Spawn new instance then exit — os.execv unreliable in frozen apps
+                creationflags = 0
+                if sys.platform == "win32":
+                    DETACHED_PROCESS    = 0x00000008
+                    CREATE_NEW_PROCESS_GROUP = 0x00000200
+                    creationflags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+
+                subprocess.Popen(args, close_fds=True, creationflags=creationflags)
                 app = QApplication.instance()
                 if app:
-                    app.aboutToQuit.connect(
-                        lambda: os.execv(sys.executable, [sys.executable] + sys.argv)
-                    )
                     app.quit()
                 else:
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                    sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
+# Session memory
+# ---------------------------------------------------------------------------
+
+def load_session() -> dict:
+    """Load session state from settings.json. Returns safe defaults if missing."""
+    data = _load_settings()
+    return {
+        "last_batch_folder":  data.get("last_batch_folder", ""),
+        "last_video_folder":  data.get("last_video_folder", ""),
+        "window_geometry":    data.get("window_geometry", ""),
+    }
+
+
+def save_session(last_batch_folder: str, last_video_folder: str, window_geometry: str) -> None:
+    """Persist session state to settings.json."""
+    data = _load_settings()
+    data["last_batch_folder"] = last_batch_folder
+    data["last_video_folder"] = last_video_folder
+    data["window_geometry"]   = window_geometry
+    _save_settings(data)

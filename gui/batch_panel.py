@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path managed by subforge.py entry point — do not insert __file__-relative paths here
 
 from core import collect_files, run_batch, save_batch, BatchResult, FileResult, SUPPORTED_EXTENSIONS
 from core import apply_cleaning_options, block_will_be_removed
@@ -232,9 +232,9 @@ class BatchPanel(QWidget):
         self._result_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self._result_list.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self._result_list.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self._result_list.setColumnWidth(1, 48)
-        self._result_list.setColumnWidth(2, 48)
-        self._result_list.setColumnWidth(3, 56)
+        self._result_list.setColumnWidth(1, 64)
+        self._result_list.setColumnWidth(2, 64)
+        self._result_list.setColumnWidth(3, 64)
         self._result_list.setStyleSheet(
             f'QTableWidget {{ background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px; }}'
             f'QTableWidget::item {{ padding: 4px 8px; border-bottom: 1px solid {BORDER}; }}'
@@ -369,6 +369,24 @@ class BatchPanel(QWidget):
         self._on_row_selected(row)
 
     # ── Folder selection ──────────────────────────────────────────────────
+
+    # ------------------------------------------------------------------
+    # Public session-memory API
+    # ------------------------------------------------------------------
+
+    def get_folder(self) -> str:
+        """Return current root folder as a string, or '' if none selected."""
+        return str(self._root_folder) if self._root_folder else ""
+
+    def set_folder(self, path: str) -> None:
+        """Restore a previously saved folder and kick off a scan."""
+        if not path:
+            return
+        p = Path(path)
+        if p.is_dir():
+            self._root_folder = p
+            self._lbl_folder.setText(str(p))
+            self._scan()
 
     def _select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Base Folder")
@@ -543,27 +561,27 @@ class BatchPanel(QWidget):
   .reason      {{ color:#565f89; font-size:11px; margin-right:6px; }}
   .divider     {{ color:#2a3347; }}
 </style>
-<div class="section">BATCH SUMMARY</div>
-<div class="stat-row"><span class="stat-label">Threshold: </span>
+<div class="section">" + STRINGS["rpt_batch_summary"] + "</div>
+<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_threshold"] + ' </span>
   <span class="stat-val">regex_matches ≥ {t}</span></div>
-<div class="stat-row"><span class="stat-label">Files scanned: </span>
+<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_scanned"] + ' </span>
   <span class="stat-val">{self._batch_result.total}</span></div>
-<div class="stat-row"><span class="stat-label">Files to clean: </span>
+<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_to_clean"] + ' </span>
   <span class="stat-val" style="color:#f38ba8">{len(flagged)}</span></div>
-<div class="stat-row"><span class="stat-label">Clean files: </span>
+<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_clean"] + ' </span>
   <span class="stat-val" style="color:#a6e3a1">{len(clean)}</span></div>
-<div class="stat-row"><span class="stat-label">Errors: </span>
+<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_errors"] + ' </span>
   <span class="stat-val">{len(errors)}</span></div>
 """]
 
         if flagged:
-            html.append('<div class="section">FILES WITH ADS / WARNINGS</div>')
+            html.append('<div class="section">' + STRINGS["rpt_batch_flagged"] + '</div>')
             for r, ads, warns, opts_count in flagged:
-                ad_tag = f'<span class="tag-ad">{ads} ads</span>' if ads else ''
-                opt_tag = (f'<span style="color:#4e9eff;font-weight:bold">{opts_count} opts</span>'
+                ad_tag = f'<span class="tag-ad">{ads} ' + STRINGS["rpt_lbl_ads"] + '</span>' if ads else ''
+                opt_tag = (f'<span style="color:#4e9eff;font-weight:bold">{opts_count} ' + STRINGS["rpt_lbl_opts"] + '</span>'
                            if opts_count else '')
                 sep = ' + ' if ad_tag and opt_tag else ''
-                wn_tag = f'<span class="tag-warn">{warns} warns</span>' if warns else ''
+                wn_tag = f'<span class="tag-warn">{warns} ' + STRINGS["rpt_lbl_warns"] + '</span>' if warns else ''
                 html.append(f'<div class="file-header">'
                             f'&nbsp;{ad_tag}{sep}{opt_tag} {wn_tag}&nbsp;&nbsp;'
                             f'<span style="color:#cdd6f4">{esc(r.path.parent.name)}/</span>'
@@ -579,7 +597,7 @@ class BatchPanel(QWidget):
                         if b.regex_matches >= t:
                             html.append(
                                 f'<div class="block-ad">'
-                                f'<span class="tag-ad">AD</span>&nbsp;'
+                                f'<span class="tag-ad">' + STRINGS["rpt_tag_ad"] + '</span>&nbsp;'
                                 f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
                                 f'<span class="block-text">{esc(b.text[:80])}</span>'
                                 f'<div class="block-meta">{reasons_html}</div>'
@@ -588,17 +606,17 @@ class BatchPanel(QWidget):
                         elif will_clean:
                             html.append(
                                 f'<div class="block-opt">'
-                                f'<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>&nbsp;'
+                                f'<span style="color:#4e9eff;font-weight:bold">' + STRINGS["rpt_tag_clean_opt"] + '</span>&nbsp;'
                                 f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
                                 f'<span style="color:#89b4fa">{esc(b.text[:80])}</span>'
                                 f'<div class="block-meta" style="color:#4e9eff">'
-                                f'will be removed by cleaning options</div>'
+                                + STRINGS["rpt_lbl_cleaning_opts"] + '</div>'
                                 f'</div>'
                             )
                         elif b.regex_matches == t - 1 and t > 1:
                             html.append(
                                 f'<div class="block-warn">'
-                                f'<span class="tag-warn">WARN</span>&nbsp;'
+                                f'<span class="tag-warn">' + STRINGS["rpt_tag_warn"] + '</span>&nbsp;'
                                 f'<span class="block-ts">[{esc(b.start)}]</span>&nbsp;'
                                 f'<span class="block-text-warn">{esc(b.text[:80])}</span>'
                                 f'<div class="block-meta">{reasons_html}</div>'
@@ -606,16 +624,16 @@ class BatchPanel(QWidget):
                             )
 
         if errors:
-            html.append('<div class="section">ERRORS</div>')
+            html.append('<div class="section">' + STRINGS["rpt_batch_errors_section"] + '</div>')
             for r in errors:
                 html.append(f'<div style="color:#888;margin:2px 0">'
                             f'✕ {esc(r.path.name)} — {esc(r.error)}</div>')
 
         if clean:
-            html.append('<div class="section">CLEAN FILES</div>')
+            html.append('<div class="section">' + STRINGS["rpt_batch_clean_section"] + '</div>')
             for r in clean:
                 html.append(f'<div style="color:#6c7a96;margin:1px 0">'
-                            f'<span class="tag-clean">✓</span>&nbsp;'
+                            f'<span class="tag-clean">' + STRINGS["rpt_tag_clean"] + '</span>&nbsp;'
                             f'{esc(r.path.parent.name)}/{esc(r.path.name)}</div>')
 
         return "\n".join(html)
@@ -678,10 +696,10 @@ class BatchPanel(QWidget):
 <div class="file-path">{esc(fr.path.parent)}/</div>
 <div class="file-name">{esc(fr.path.name)}</div>
 <div class="summary">
-  Threshold: rm≥{t} &nbsp;|&nbsp;
-  {len(fr.subtitle.blocks)} blocks total &nbsp;|&nbsp;
-  <span style="color:#f38ba8">{ads} ads</span> &nbsp;|&nbsp;
-  <span style="color:#fab387">{warns} warnings</span>
+  {STRINGS["rpt_batch_threshold"]} rm≥{t} &nbsp;|&nbsp;
+  {len(fr.subtitle.blocks)} {STRINGS["rpt_video_blocks"][:-1].lower()} &nbsp;|&nbsp;
+  <span style="color:#f38ba8">{ads} {STRINGS["rpt_lbl_ads"]}</span> &nbsp;|&nbsp;
+  <span style="color:#fab387">{warns} {STRINGS["rpt_lbl_warns"]}</span>
 </div>"""]
 
         found_any = False
@@ -698,30 +716,30 @@ class BatchPanel(QWidget):
                     for h in dict.fromkeys(b.hints)
                 )
                 if will_clean and b.regex_matches < t:
-                    reasons_html += '<span class="reason" style="color:#4e9eff">cleaning options</span>'
+                    reasons_html += '<span class="reason" style="color:#4e9eff">' + STRINGS["rpt_lbl_cleaning_opts"] + '</span>'
                 if is_kept:
                     div_cls  = "block-kept"
-                    tag      = '<span class="tag-kept">KEPT</span>'
+                    tag      = '<span class="tag-kept">' + STRINGS["rpt_tag_kept"] + '</span>'
                     txt_cls  = "kept-text"
-                    btn_lbl  = "Kept — click to undo"
+                    btn_lbl  = STRINGS["rpt_btn_kept"]
                     btn_col  = FG2
                 elif will_clean and b.regex_matches < t:
                     div_cls  = "block-opt"
-                    tag      = '<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>'
+                    tag      = '<span style="color:#4e9eff;font-weight:bold">' + STRINGS["rpt_tag_clean_opt"] + '</span>'
                     txt_cls  = "opt-text"
-                    btn_lbl  = "Keep — not an ad"
+                    btn_lbl  = STRINGS["rpt_btn_keep"]
                     btn_col  = FG2
                 elif is_ad:
                     div_cls  = "block-ad"
-                    tag      = '<span class="tag-ad">AD</span>'
+                    tag      = '<span class="tag-ad">' + STRINGS["rpt_tag_ad"] + '</span>'
                     txt_cls  = "ad-text"
-                    btn_lbl  = "Keep — not an ad"
+                    btn_lbl  = STRINGS["rpt_btn_keep"]
                     btn_col  = FG2
                 else:
                     div_cls  = "block-warn"
-                    tag      = '<span class="tag-warn">WARN</span>'
+                    tag      = '<span class="tag-warn">' + STRINGS["rpt_tag_warn"] + '</span>'
                     txt_cls  = "warn-text"
-                    btn_lbl  = "Keep — not an ad"
+                    btn_lbl  = STRINGS["rpt_btn_keep"]
                     btn_col  = FG2
                 html.append(
                     f'<div class="{div_cls}">'
@@ -740,19 +758,19 @@ class BatchPanel(QWidget):
                 )
 
         if not found_any:
-            html.append('<div class="clean-msg">No issues found at this threshold.</div>')
+            html.append('<div class="clean-msg">' + STRINGS["rpt_batch_no_issues"] + '</div>')
 
         # Append cleaning options report if any changes were made
         cr = getattr(fr, 'cleaning_report', None)
         if cr and cr.any_changes:
-            html.append('<div class="section">CLEANING OPTIONS APPLIED</div>')
+            html.append('<div class="section">' + STRINGS["rpt_batch_cleaning_section"] + '</div>')
             if cr.removals():
                 html.append(f'<div class="meta-row" style="color:#f38ba8">')
                 html.append(f'Removed {len(cr.removals())} block(s):</div>')
                 for a in cr.removals():
                     html.append(
                         f'<div class="block-ad">'
-                        f'<span class="tag-ad">REMOVED</span>&nbsp;'
+                        f'<span class="tag-ad">' + STRINGS["rpt_tag_removed"] + '</span>&nbsp;'
                         f'<span class="block-ts">[{esc(a.timestamp)}]</span>&nbsp;'
                         f'<span style="color:#f38ba8">{esc(a.reason)}</span><br>'
                         f'<span style="color:#888;text-decoration:line-through">'
@@ -764,7 +782,7 @@ class BatchPanel(QWidget):
                 for a in cr.modifications():
                     html.append(
                         f'<div class="block-warn">'
-                        f'<span class="tag-warn">MODIFIED</span>&nbsp;'
+                        f'<span class="tag-warn">' + STRINGS["rpt_tag_modified"] + '</span>&nbsp;'
                         f'<span class="block-ts">[{esc(a.timestamp)}]</span>&nbsp;'
                         f'<span style="color:#ffc990">{esc(a.reason)}</span><br>'
                         f'<span style="color:#888;text-decoration:line-through">'

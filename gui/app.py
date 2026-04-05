@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 # Allow running standalone
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path managed by subforge.py entry point — do not insert __file__-relative paths here
 
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QMimeData, QUrl,
                            QSize, QTimer)
@@ -25,7 +25,8 @@ from PyQt6.QtWidgets import (
 
 from core import load_subtitle, write_subtitle, analyze, clean, SUPPORTED_EXTENSIONS
 from core import CleaningOptions, apply_cleaning_options
-from .settings_dialog import SettingsDialog, load_cleaning_options, load_default_sensitivity
+from .settings_dialog import SettingsDialog, load_cleaning_options, load_default_sensitivity, load_session, save_session
+from .setup_wizard    import SetupWizard, is_setup_complete
 from .strings import STRINGS
 from core import block_will_be_removed
 from core import VIDEO_EXTENSIONS
@@ -440,6 +441,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
+        self._restore_session()
 
         if preload:
             self._enqueue_files(preload)
@@ -742,14 +744,66 @@ class MainWindow(QMainWindow):
 
     # ── Settings ─────────────────────────────────────────────────────────────
 
+    # ------------------------------------------------------------------
+    # Session memory
+    # ------------------------------------------------------------------
+
+    def _restore_session(self) -> None:
+        """Restore window geometry and last-used folders from settings.json."""
+        session = load_session()
+
+        geom = session.get("window_geometry", "")
+        if geom:
+            try:
+                from PyQt6.QtCore import QByteArray
+                from PyQt6.QtWidgets import QApplication
+                self.restoreGeometry(QByteArray.fromBase64(geom.encode("ascii")))
+                # Validate the restored geometry fits within the available screen area.
+                # If the window is mostly off-screen (e.g. saved on a 4K display, now
+                # on 1080p) reset to the default size and centre on the current screen.
+                screen = QApplication.primaryScreen().availableGeometry()
+                frame  = self.frameGeometry()
+                if (frame.width() > screen.width()
+                        or frame.height() > screen.height()
+                        or frame.right()  < screen.left() + 50
+                        or frame.bottom() < screen.top()  + 50
+                        or frame.left()   > screen.right()  - 50
+                        or frame.top()    > screen.bottom() - 50):
+                    self.resize(1200, 750)
+                    self.move(screen.center() - self.rect().center())
+            except Exception:
+                pass  # malformed geometry — just use the default size
+
+        self._batch_panel.set_folder(session.get("last_batch_folder", ""))
+        self._video_panel.set_folder(session.get("last_video_folder", ""))
+
+    def closeEvent(self, event) -> None:
+        """Persist session state before the window closes."""
+        try:
+            geom_b64 = self.saveGeometry().toBase64().data().decode("ascii")
+            save_session(
+                last_batch_folder=self._batch_panel.get_folder(),
+                last_video_folder=self._video_panel.get_folder(),
+                window_geometry=geom_b64,
+            )
+        except Exception:
+            pass  # never block shutdown due to a settings write error
+        super().closeEvent(event)
+
     def _open_settings(self):
-        dlg = SettingsDialog(self)
-        if dlg.exec():
-            # Push new default sensitivity to all three sliders immediately
-            v = load_default_sensitivity()
-            self._sf_slider.setValue(v)
-            self._batch_panel._slider.setValue(v)
-            self._video_panel._slider.setValue(v)
+        import traceback
+        try:
+            dlg = SettingsDialog(self)
+            if dlg.exec():
+                v = load_default_sensitivity()
+                self._sf_slider.setValue(v)
+                self._batch_panel._slider.setValue(v)
+                self._video_panel._slider.setValue(v)
+        except Exception:
+            err = traceback.format_exc()
+            _get_crash_log_path().write_text(err, encoding="utf-8")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error", f"Settings crashed:\n\n{err}")
 
     # ── Single File sensitivity ──────────────────────────────────────────────
 
@@ -1199,12 +1253,35 @@ class MainWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+def _get_crash_log_path():
+    """Return a writable path for crash logs."""
+    import os
+    # Use AppData on Windows, home dir elsewhere — always writable
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path.home()
+    log_dir = base / "SubForge"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "subforge_crash.log"
+
+
 def launch_gui(preload: List[Path] = None):
-    app = QApplication.instance() or QApplication(sys.argv)
-    app.setStyleSheet(STYLESHEET)
-    win = MainWindow(preload=preload or [])
-    win.show()
-    sys.exit(app.exec())
+    import traceback
+    _log = _get_crash_log_path()
+
+    try:
+        app = QApplication.instance() or QApplication(sys.argv)
+        app.setStyleSheet(STYLESHEET)
+        win = MainWindow(preload=preload or [])
+        win.show()
+        if not is_setup_complete():
+            wizard = SetupWizard(parent=win)
+            wizard.exec()
+        sys.exit(app.exec())
+    except Exception:
+        _log.write_text(traceback.format_exc(), encoding="utf-8")
+        raise
 
 
 if __name__ == "__main__":

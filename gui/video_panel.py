@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path managed by subforge.py entry point — do not insert __file__-relative paths here
 
 from core import (
     collect_video_files, scan_video, ffprobe_available, ffmpeg_available,
@@ -107,7 +107,7 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
     """
     parts = [HTML_STYLE,
              f'<div class="meta-lbl">{_esc(result.path.name)}</div>',
-             f'<div class="section">Subtitle Track</div>']
+             f'<div class="section">' + STRINGS["rpt_video_subtitle_track"] + '</div>']
 
     def row(lbl, val, color=None):
         vs = f' style="color:{color}"' if color else ''
@@ -116,31 +116,30 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
             f'<span class="meta-val"{vs}>{_esc(val)}</span></div>'
         )
 
-    row("Track:", f"{track.track_num}  (stream index {track.index})")
-    row("Codec:", track.codec)
-    row("Language:", track.language)
+    row(STRINGS["rpt_video_track"], f'{track.track_num}  (' + STRINGS["rpt_video_stream_index"].format(index=track.index) + ')')
+    row(STRINGS["rpt_video_codec"], track.codec)
+    row(STRINGS["rpt_video_language"], track.language)
     if track.title:
         row("Title:", track.title)
-    row("Forced:", "Yes" if track.forced else "No")
-    row("Default:", "Yes" if track.default else "No")
+    row(STRINGS["rpt_video_forced"], STRINGS["rpt_video_yes"] if track.forced else STRINGS["rpt_video_no"])
+    row(STRINGS["rpt_video_default"], STRINGS["rpt_video_yes"] if track.default else STRINGS["rpt_video_no"])
 
     if not track.is_text:
-        parts.append('<div class="section">Status</div>')
+        parts.append('<div class="section">' + STRINGS["rpt_video_status"] + '</div>')
         if track.is_image:
             parts.append(
                 f'<div class="block-img"><span class="tag-img">IMAGE</span>&nbsp;'
-                f'Image-based format — OCR required, not supported.</div>'
+                + STRINGS["rpt_video_image_track"] + '</div>'
             )
         else:
             parts.append(
-                f'<div class="block-err">Cannot scan: '
-                f'{_esc(track.scan_error or "unsupported codec")}</div>'
+                f'<div class="block-err">' + STRINGS["rpt_video_scan_error"].format(error=_esc(track.scan_error or STRINGS["rpt_video_unsupported"])) + '</div>'
             )
         return "\n".join(parts)
 
     if track.scan_error:
-        parts.append('<div class="section">Status</div>')
-        parts.append(f'<div class="block-err">Scan error: {_esc(track.scan_error)}</div>')
+        parts.append('<div class="section">' + STRINGS["rpt_video_status"] + '</div>')
+        parts.append(f'<div class="block-err">' + STRINGS["rpt_video_scan_error"].format(error=_esc(track.scan_error)) + '</div>')
         return "\n".join(parts)
 
     # Use stored subtitle for threshold-aware counts
@@ -160,14 +159,14 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
     else:
         ads, warns, kept, clean_opt_blocks = [], [], [], []
 
-    parts.append('<div class="section">Results</div>')
-    row("Blocks:", str(track.total_blocks))
-    row("Ads at this threshold:", str(len(ads)),
+    parts.append('<div class="section">' + STRINGS["rpt_video_results"] + '</div>')
+    row(STRINGS["rpt_video_blocks"], str(track.total_blocks))
+    row(STRINGS["rpt_video_ads"], str(len(ads)),
         color="#ff9eb5" if ads else GREEN)
     if clean_opt_blocks:
-        row("Removed by cleaning options:", str(len(clean_opt_blocks)),
+        row(STRINGS["rpt_video_cleaning"], str(len(clean_opt_blocks)),
             color="#ff9eb5")
-    row("Warnings at this threshold:", str(len(warns)),
+    row(STRINGS["rpt_video_warns"], str(len(warns)),
         color="#ffc990" if warns else None)
     if kept:
         row("Manually kept (won't be removed):", str(len(kept)),
@@ -175,10 +174,9 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
 
     if sub is not None and (ads or warns or clean_opt_blocks):
         parts.append(
-            f'<div class="note">Click "Keep — not an ad" on any block below '
-            f'to exclude it from cleaning. Changes apply when you Clean &amp; Remux.</div>'
+            '<div class="note">' + STRINGS["rpt_video_keep_note"] + '</div>'
         )
-        parts.append('<div class="section">Flagged Blocks</div>')
+        parts.append('<div class="section">' + STRINGS["rpt_video_flagged"] + '</div>')
         for b in ads + clean_opt_blocks + warns:
             is_kept = getattr(b, '_kept', False)
             is_ad   = b.regex_matches >= threshold
@@ -188,33 +186,33 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
                 for h in dict.fromkeys(b.hints)
             ) if hasattr(b, 'hints') else ""
             if is_clean_opt and not is_ad:
-                reasons_html += '<span class="reason" style="color:#4e9eff">cleaning options</span>'
+                reasons_html += '<span class="reason" style="color:#4e9eff">' + STRINGS["rpt_lbl_cleaning_opts"] + '</span>'
             if is_kept:
                 div_class = "block-kept"
-                tag = '<span class="tag-kept">KEPT</span>'
+                tag = '<span class="tag-kept">' + STRINGS["rpt_tag_kept"] + '</span>'
                 text_class = "kept-text"
-                btn_label = "✓ Kept — click to undo"
+                btn_label = STRINGS["rpt_btn_kept"]
                 btn_color = FG2
                 btn_border = BORDER
             elif is_clean_opt and not is_ad:
                 div_class = "block-opt"
-                tag = '<span style="color:#4e9eff;font-weight:bold">CLEAN OPT</span>'
+                tag = '<span style="color:#4e9eff;font-weight:bold">' + STRINGS["rpt_tag_clean_opt"] + '</span>'
                 text_class = "opt-text"
-                btn_label = "Keep — not an ad"
+                btn_label = STRINGS["rpt_btn_keep"]
                 btn_color = FG2
                 btn_border = BORDER
             elif is_ad:
                 div_class = "block-ad"
-                tag = '<span class="tag-ad">AD</span>'
+                tag = '<span class="tag-ad">' + STRINGS["rpt_tag_ad"] + '</span>'
                 text_class = "ad-text"
-                btn_label = "Keep — not an ad"
+                btn_label = STRINGS["rpt_btn_keep"]
                 btn_color = FG2
                 btn_border = BORDER
             else:
                 div_class = "block-warn"
-                tag = '<span class="tag-warn">WARN</span>'
+                tag = '<span class="tag-warn">' + STRINGS["rpt_tag_warn"] + '</span>'
                 text_class = "warn-text"
-                btn_label = "Keep — not an ad"
+                btn_label = STRINGS["rpt_btn_keep"]
                 btn_color = FG2
                 btn_border = BORDER
 
@@ -241,7 +239,7 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
                 f'</div>'
             )
     elif sub is not None:
-        parts.append(f'<div class="clean-msg">✓ No issues at this sensitivity level.</div>')
+        parts.append('<div class="clean-msg">' + STRINGS["rpt_video_no_issues"] + '</div>')
 
     return "\n".join(parts)
 
@@ -254,13 +252,13 @@ def _video_html(result: VideoScanResult, threshold: int = 3) -> str:
              f'{_esc(str(result.path.parent))}</div>']
 
     if result.error:
-        parts.append('<div class="section">Error</div>')
+        parts.append('<div class="section">' + STRINGS["rpt_video_status"] + '</div>')
         parts.append(f'<div class="err-msg">{_esc(result.error)}</div>')
         return "\n".join(parts)
 
     total_ads  = sum(t.ads_at_threshold(threshold) for t in result.tracks)
     total_warn = sum(t.warnings_at_threshold(threshold) for t in result.tracks)
-    parts.append('<div class="section">Summary</div>')
+    parts.append('<div class="section">' + STRINGS["rpt_video_summary"] + '</div>')
     parts.append(f'<div class="meta-row"><span class="meta-lbl">Tracks:&nbsp;</span>'
                  f'<span class="meta-val">{len(result.tracks)}</span></div>')
     parts.append(
@@ -274,12 +272,12 @@ def _video_html(result: VideoScanResult, threshold: int = 3) -> str:
         f'{total_warn}</span></div>'
     )
 
-    parts.append('<div class="section">Tracks</div>')
+    parts.append('<div class="section">' + STRINGS["rpt_video_tracks"] + '</div>')
     for t in result.tracks:
         status = t.status_at_threshold(threshold)
-        tags = {"ADS":   f'<span class="tag-ad">AD</span>',
-                "WARN":  f'<span class="tag-warn">WARN</span>',
-                "CLEAN": f'<span class="tag-clean">CLEAN</span>',
+        tags = {"ADS":   '<span class="tag-ad">' + STRINGS["rpt_tag_ad"] + '</span>',
+                "WARN":  '<span class="tag-warn">' + STRINGS["rpt_tag_warn"] + '</span>',
+                "CLEAN": '<span class="tag-clean">' + STRINGS["rpt_tag_clean"] + '</span>',
                 "IMAGE": f'<span class="tag-img">IMAGE</span>'}
         tag = tags.get(status, f'<span style="color:#888">ERROR</span>')
         ads_n = t.ads_at_threshold(threshold)
@@ -558,7 +556,8 @@ class VideoScanPanel(QWidget):
         super().__init__(parent)
         self._results:  List[VideoScanResult] = []
         self._worker:   Optional[VideoScanWorker] = None
-        self._queued:   List[Path] = []
+        self._queued:       List[Path] = []
+        self._last_folder:  str = ""
         self._threshold: int = load_default_sensitivity()
         self._checked_tracks: Dict = {}
         self._current_result: Optional[VideoScanResult] = None
@@ -769,10 +768,29 @@ class VideoScanPanel(QWidget):
 
     # ── File collection ───────────────────────────────────────────────
 
+    # ------------------------------------------------------------------
+    # Public session-memory API
+    # ------------------------------------------------------------------
+
+    def get_folder(self) -> str:
+        """Return last folder added via the browse button, or '' if none."""
+        return self._last_folder
+
+    def set_folder(self, path: str) -> None:
+        """Restore a previously saved folder and populate the file list."""
+        if not path:
+            return
+        p = Path(path)
+        if p.is_dir():
+            self._last_folder = str(p)
+            self._lbl_folder.setText(str(p))
+            self._add_files(collect_video_files([p]))
+
     def _browse_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Add Video Folder")
         if folder:
             p = Path(folder)
+            self._last_folder = str(p)
             self._lbl_folder.setText(str(p))
             self._add_files(collect_video_files([p]))
 

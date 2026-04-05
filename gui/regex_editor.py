@@ -28,12 +28,12 @@ from PyQt6.QtWidgets import (
 )
 
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path managed by subforge.py entry point — do not insert __file__-relative paths here
 
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .strings import STRINGS
 
-PROFILES_DIR = Path(__file__).parent.parent / "regex_profiles" / "default"
+from core.paths import list_profile_dirs, ensure_user_profiles_dir, USER_PROFILES_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +56,14 @@ def reload_engine() -> None:
 # ---------------------------------------------------------------------------
 
 def list_profiles() -> List[Path]:
-    if not PROFILES_DIR.exists():
-        return []
-    return sorted(p for p in PROFILES_DIR.iterdir()
-                  if p.is_file() and p.suffix == ".conf")
+    profiles = []
+    seen = set()
+    for d in list_profile_dirs():
+        for p in sorted(d.iterdir()):
+            if p.is_file() and p.suffix == ".conf" and p.name not in seen:
+                seen.add(p.name)
+                profiles.append(p)
+    return profiles
 
 
 def read_profile(path: Path) -> configparser.ConfigParser:
@@ -659,34 +663,46 @@ class RegexEditorPanel(QWidget):
     # ── New profile ───────────────────────────────────────────────────────
 
     def _new_profile(self):
-        from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(
-            self, "New Profile", "Profile filename (without .conf):")
-        if not ok or not name.strip():
-            return
-        name = name.strip().lower().replace(" ", "_")
-        path = PROFILES_DIR / f"{name}.conf"
-        if path.exists():
-            QMessageBox.warning(self, "Already exists",
-                                f"{path.name} already exists.")
-            return
-        template = (
-            "[META]\n"
-            f"# Custom profile: {name}\n"
-            "language_codes = \n\n"
-            "[PURGE_REGEX]\n"
-            f"# {name}_purge1: \\bYourPatternHere\\b\n\n"
-            "[WARNING_REGEX]\n"
-            f"# {name}_warn1: \\bYourPatternHere\\b\n"
-        )
-        path.write_text(template, encoding="utf-8")
-        self._load_profile_list()
-        # Select the new one
-        for i in range(self._profile_list.count()):
-            item = self._profile_list.item(i)
-            if item.data(Qt.ItemDataRole.UserRole) == path:
-                self._profile_list.setCurrentRow(i)
-                break
+        import traceback
+        from core.paths import USER_DIR
+        try:
+            from PyQt6.QtWidgets import QInputDialog
+            name, ok = QInputDialog.getText(
+                self, "New Profile", "Profile filename (without .conf):")
+            if not ok or not name.strip():
+                return
+            name = name.strip().lower().replace(" ", "_")
+            path = ensure_user_profiles_dir() / f"{name}.conf"
+            if path.exists():
+                QMessageBox.warning(self, "Already exists",
+                                    f"{path.name} already exists.")
+                return
+            template = (
+                "[META]\n"
+                f"# Custom profile: {name}\n"
+                "language_codes = \n\n"
+                "[PURGE_REGEX]\n"
+                f"# {name}_purge1: \\bYourPatternHere\\b\n\n"
+                "[WARNING_REGEX]\n"
+                f"# {name}_warn1: \\bYourPatternHere\\b\n"
+            )
+            path.write_text(template, encoding="utf-8")
+            self._load_profile_list()
+            for i in range(self._profile_list.count()):
+                item = self._profile_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == path:
+                    self._profile_list.setCurrentRow(i)
+                    break
+        except Exception:
+            import os, sys, traceback
+            err = traceback.format_exc()
+            if sys.platform == "win32":
+                log_dir = Path(os.environ.get("APPDATA", Path.home())) / "SubForge"
+            else:
+                log_dir = Path.home() / "SubForge"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            (log_dir / "subforge_crash.log").write_text(err, encoding="utf-8")
+            QMessageBox.critical(self, "Error", f"New profile crashed:\n\n{err}")
 
     # ── Reload ────────────────────────────────────────────────────────────
 
