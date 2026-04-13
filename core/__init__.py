@@ -8,7 +8,14 @@ from .batch import collect_files, run_batch, save_batch, BatchResult, FileResult
 from .ffprobe import (
     scan_video, collect_video_files, probe_video,
     ffprobe_available, ffmpeg_available,
+    get_ffmpeg_path, set_ffmpeg_path,
+    get_ffprobe_path, set_ffprobe_path,
     VideoScanResult, SubtitleTrack, VIDEO_EXTENSIONS,
+)
+from .ocr import (
+    ocr_track,
+    tesseract_available,
+    get_tesseract_path, set_tesseract_path,
 )
 from .mkvtoolnix import (
     mkvmerge_available, get_mkvmerge_path, set_mkvmerge_path,

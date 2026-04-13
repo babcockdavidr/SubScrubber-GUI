@@ -28,6 +28,71 @@ _SUBPROCESS_FLAGS: dict = (
 
 
 # ---------------------------------------------------------------------------
+# Settings persistence  (ffmpeg / ffprobe paths)
+# ---------------------------------------------------------------------------
+
+from .paths import SETTINGS_FILE as _SETTINGS_FILE
+
+
+def _load_settings() -> dict:
+    try:
+        if _SETTINGS_FILE.exists():
+            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_settings(data: dict) -> None:
+    try:
+        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def get_ffmpeg_path() -> Optional[str]:
+    saved = _load_settings().get("ffmpeg_path", "")
+    if saved and Path(saved).is_file():
+        return saved
+    return shutil.which("ffmpeg")
+
+
+def set_ffmpeg_path(path: str) -> None:
+    s = _load_settings()
+    s["ffmpeg_path"] = path
+    _save_settings(s)
+
+
+def get_ffprobe_path() -> Optional[str]:
+    saved = _load_settings().get("ffprobe_path", "")
+    if saved and Path(saved).is_file():
+        return saved
+    return shutil.which("ffprobe")
+
+
+def set_ffprobe_path(path: str) -> None:
+    s = _load_settings()
+    s["ffprobe_path"] = path
+    _save_settings(s)
+
+
+def _find_ffprobe() -> Optional[str]:
+    return get_ffprobe_path()
+
+
+def _find_ffmpeg() -> Optional[str]:
+    return get_ffmpeg_path()
+
+
+def ffprobe_available() -> bool:
+    return get_ffprobe_path() is not None
+
+
+def ffmpeg_available() -> bool:
+    return get_ffmpeg_path() is not None
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -86,13 +151,26 @@ class SubtitleTrack:
     subtitle: Any = None  # ParsedSubtitle — stored for re-thresholding in GUI
 
     @property
+    def codec_display(self) -> str:
+        """Human-readable codec name."""
+        return {
+            "hdmv_pgs_subtitle": "PGS",
+            "pgssub":            "PGS",
+            "dvd_subtitle":      "VOBSUB",
+            "dvdsub":            "VOBSUB",
+            "dvb_subtitle":      "DVB",
+            "dvb_teletext":      "DVB Teletext",
+            "xsub":              "XSUB",
+        }.get(self.codec, self.codec)
+
+    @property
     def display_name(self) -> str:
         parts = [f"Track {self.track_num}"]
         if self.language and self.language != "und":
             parts.append(f"[{self.language}]")
         if self.title:
             parts.append(self.title)
-        parts.append(f"({self.codec})")
+        parts.append(f"({self.codec_display})")
         if self.forced:
             parts.append("FORCED")
         if self.default:
@@ -174,21 +252,6 @@ class VideoScanResult:
 # ---------------------------------------------------------------------------
 # ffprobe / ffmpeg helpers
 # ---------------------------------------------------------------------------
-
-def _find_ffprobe() -> Optional[str]:
-    return shutil.which("ffprobe")
-
-
-def _find_ffmpeg() -> Optional[str]:
-    return shutil.which("ffmpeg")
-
-
-def ffprobe_available() -> bool:
-    return _find_ffprobe() is not None
-
-
-def ffmpeg_available() -> bool:
-    return _find_ffmpeg() is not None
 
 
 def probe_video(path: Path) -> Tuple[List[SubtitleTrack], str]:

@@ -59,6 +59,7 @@ USER_DIR: Path       = _get_user_dir()
 SETTINGS_FILE: Path      = USER_DIR / "settings.json"
 PROFILES_DIR: Path       = BASE_DIR / "regex_profiles" / "default"
 USER_PROFILES_DIR: Path  = USER_DIR / "regex_profiles" / "default"
+CHANGELOG_FILE: Path     = BASE_DIR / "CHANGELOG.md"
 
 
 def list_profile_dirs() -> list:
