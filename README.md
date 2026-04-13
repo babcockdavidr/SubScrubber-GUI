@@ -1,4 +1,4 @@
-# SubForge — v0.9.0: Packaging & Distribution
+# SubForge — v0.10.0: Image Subtitles (VOBSUB/PGS) Update 
 
 **Remove ads, watermarks, and distributor junk from subtitle files.**
 
@@ -10,25 +10,18 @@ Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt
 
 ## What's New
 
-### v0.9.0 — Packaging & Distribution
-- **Standalone executable** — SubForge now ships as a double-clickable Windows installer. No Python installation required. macOS and Linux binaries are planned for a future release.
-- **Windows installer** — a proper installer puts SubForge in Program Files, creates a Start Menu shortcut, and includes an uninstaller. Optional file associations for `.srt`, `.ass`, and `.vtt`.
-- **GitHub Actions** — every tagged release automatically builds the Windows installer and attaches it to the GitHub release. No manual uploads needed.
-- **First-run setup wizard** — on first launch, SubForge checks for FFmpeg and MKVToolNix, shows a green/red status for each, and provides download links for anything missing.
-- **Session memory** — SubForge now remembers your last Batch folder, last Video Scan folder, and window size and position across restarts.
-- **14 language packs** — the UI is now available in English, Spanish, Dutch, Hebrew, Indonesian, Portuguese, Swedish, French, Arabic, Chinese, Hindi, Russian, Turkish, and Polish. Select your language in Settings > General.
-- **HTML report strings** — all text in the Batch and Video Scan detail reports is now fully translatable and covered by all 14 language packs.
-
-### v0.8.0 — Settings Expansion & Polish
-- **App renamed to SubForge** — the app is now SubForge. Entry point is `subforge.py`, GitHub repository is `babcockdavidr/SubForge`, and all internal references are updated.
-- **Settings dialog expanded** — the Settings dialog now has four tabs: General, Cleaning Options, Paths, and About.
-- **General tab** — set your default sensitivity level once and it applies across Single File, Batch, and Video Scan on every launch. Changing it in Settings updates all three sliders immediately.
-- **Language support** — SubForge now ships in English and Spanish. Select your language in Settings > General. A one-click restart prompt applies the change.
-- **About tab** — version number, creator credit, GitHub link, MIT license, and a Report an Issue button that opens GitHub Issues directly.
-- **String extraction** — all user-facing strings live in `gui/strings.py`. Adding a new language requires only a new dictionary in that file. Missing translation keys fall back to English automatically, with a visible placeholder if the key is missing from English too.
-- **Column sort on Batch** — the scanned files list is now a proper table with File, Ads, Opts, and Warns columns. Click any column header to sort. Numeric columns sort numerically.
-- **Threshold labels unified** — sensitivity labels are now identical across all three tabs. The old `rm≥N` annotations and TV/Movies recommendations are gone.
-- **Updater improved** — the Check for Updates error dialog now distinguishes between a network failure and a 404 (no releases published yet), with a cleaner message for each.
+### v0.10.0 — Image Subs
+- **Image Subs tab** — a dedicated tab for scanning PGS (Blu-ray) and VOBSUB (DVD) image-based subtitle tracks using Tesseract OCR. The same ad-detection engine used on text tracks runs on the OCR output, closing the last remaining gap in video subtitle coverage.
+- **Tesseract OCR integration** — SubForge extracts one bitmap per subtitle event, runs Tesseract on each frame, assembles the result into a proper subtitle, and feeds it through the detection engine unchanged.
+- **Save as .srt** — OCR'd subtitles can be saved as standalone `.srt` files next to the video, following the same `[stem].[lang].srt` naming convention as Video Scan.
+- **Remux into video** — OCR'd text tracks can be remuxed back into MKV or MP4 files, either replacing the original image track or kept alongside it on MKV (user's choice via checkbox).
+- **Sensitivity slider** — Image Subs has its own sensitivity slider that auto-refreshes the detail pane, respecting your default from Settings.
+- **Open in Image Subs** — Video Scan now shows an "Open in Image Subs →" button in the detail pane whenever a video has image tracks, handing the file off directly.
+- **Settings > Paths expanded** — ffmpeg, ffprobe, and Tesseract now each have their own path entry in Settings > Paths. All four tools show live found/not-found status.
+- **First-run wizard updated** — Tesseract now appears alongside FFmpeg and MKVToolNix, with a language selector right in the wizard that restarts the app to apply immediately.
+- **What's New in Settings** — a new button in Settings > About opens a scrollable release notes dialog reading from the bundled `CHANGELOG.md`.
+- **System language auto-detection** — on first launch, SubForge detects the OS locale and automatically selects the matching language pack, falling back to English.
+- **Translation fixes** — Settings Save/Cancel buttons and all five sensitivity slider labels are now fully translated across all 14 language packs.
 
 ---
 
@@ -42,7 +35,7 @@ Subtitle files downloaded from the internet are frequently polluted with ads, di
 
 **Compared to the original subcleaner:** SubForge extends subcleaner's detection engine with a full graphical interface, multi-format support (subcleaner only handles `.srt`), batch processing with a sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix-based remuxing, an in-app regex editor, and is fully cross-platform compatible. Everything subcleaner does from the command line, SubForge does with a GUI (plus so much more).
 
-**Compared to online subtitle cleaners:** Online tools require uploading your subtitle files to a third-party server. SubForge runs entirely on your own machine. No files ever leave your computer. No accounts. No internet connection required at any point during use. No ads. To this author's knowledge, there are no online subtitle cleaners that support recursive folder search uploads, additional filetypes beyond `.srt`, and cleaning embedded subtitles, all of which SubForge excels at.
+**Compared to online subtitle cleaners:** Online tools require uploading your subtitle files to a third-party server. SubForge runs entirely on your own machine. No files ever leave your computer. No accounts. No internet connection required at any point during use. No ads. To this author's knowledge, there are no online subtitle cleaners that support recursive folder search uploads, additional filetypes beyond `.srt`, cleaning embedded subtitles, or OCR scanning of image-based subtitle tracks (PGS/VOBSUB) — all of which SubForge excels at.
 
 ### Key properties
 
@@ -63,12 +56,13 @@ Subtitle files downloaded from the internet are frequently polluted with ads, di
 - Python 3.10 or newer
 - FFmpeg (optional — only needed for Video Scan and MP4 remux)
 - MKVToolNix (optional — only needed for Clean & Remux on MKV files)
+- Tesseract OCR (optional — only needed for the Image Subs tab)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`requirements.txt` installs: `PyQt6` and `pysubs2`
+`requirements.txt` installs: `PyQt6`, `pysubs2`, `pytesseract`, and `Pillow`. Note that `pytesseract` and `Pillow` are only required for the Image Subs tab — the rest of SubForge works without them.
 
 ---
 
@@ -93,7 +87,7 @@ python subforge.py movie.en.srt
 
 ## GUI Overview
 
-The main window has four tabs: **Single File**, **Batch**, **Video Scan**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
+The main window has five tabs: **Single File**, **Batch**, **Video Scan**, **Image Subs**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
 
 ---
 
@@ -187,7 +181,7 @@ Inspects subtitle tracks embedded directly inside video container files. Useful 
 8. Choose your action:
    - **Extract & Save .srt/.ass** — extracts the track, cleans it, and saves it as a standalone subtitle file next to the video, named `[video filename].[language].[ext]`. Works with any video format. Does not modify the original video. Most media players automatically detect external subtitle files.
    - **Clean & Remux** — cleans the selected tracks and rebuilds the video file with the cleaned tracks replacing the originals. See format support below.
-9. Image-based subtitle formats (Blu-ray PGS, DVD VOBSUB, DVB Teletext) are detected and listed but cannot be scanned — text extraction requires OCR, which is not supported
+9. Image-based subtitle formats (Blu-ray PGS, DVD VOBSUB) are detected and listed — click **Open in Image Subs →** in the detail pane to hand the file off to the Image Subs tab for OCR scanning.
 
 ### Clean & Remux format support
 
@@ -201,6 +195,37 @@ Both create a backup file by default (`.backup.mkv` or `.backup.mp4`) before ove
 ### MKVToolNix Settings
 
 If `mkvmerge` is not on your system PATH, click **Settings** in the Video Scan tab to browse for `mkvmerge.exe` directly. The path is saved to `settings.json` and persists across restarts. SubForge also checks the default Windows install location (`C:\Program Files\MKVToolNix\mkvmerge.exe`) automatically.
+
+---
+
+## Image Subs Tab
+
+For scanning image-based subtitle tracks (Blu-ray PGS, DVD VOBSUB) inside video files using Tesseract OCR, then running the same ad-detection engine used on text tracks.
+
+![Image Subs Tab](images/Image_Subs_Screenshot.png)
+
+> ⚠ **Experimental** — This tab is under active development and may produce unexpected results. Requires Tesseract OCR to be installed separately (see below).
+
+**Workflow:**
+1. Drop a video file onto the drop zone, or use **Browse**, or click **Open in Image Subs →** from the Video Scan tab
+2. All image-based subtitle tracks are listed in the left pane with their codec (PGS or VOBSUB), language, and flags
+3. Select a track, then click **Scan Image Tracks**
+4. SubForge extracts the subtitle bitmaps, runs Tesseract OCR on each frame, and feeds the result through the ad-detection engine
+5. Use the **Sensitivity slider** to adjust the detection threshold — the detail pane updates instantly
+6. Review results in the detail pane — total blocks, ad blocks, warnings, and flagged samples
+7. Choose your output:
+   - **Save as .srt** — writes the OCR'd subtitle as `[video stem].[lang].srt` next to the video
+   - **Remux into video** — rebuilds the video file with the new text track replacing (or alongside) the original image track
+
+**Keep original image track** — when remuxing an MKV, check this to keep the original PGS/VOBSUB track alongside the new text track. Unchecked (default): the image track is replaced. Not available for MP4 files.
+
+### Tesseract OCR
+
+Tesseract is the OCR engine that reads text from subtitle bitmaps. It must be installed separately — SubForge bundles the Python wrapper but not the engine itself.
+
+**Windows:** Download the installer from [github.com/UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki) and run it. Then set the path in **Settings → Paths → Tesseract OCR** if it was not added to your system PATH automatically.
+
+Tesseract accuracy varies by subtitle style and source quality. Yellow-on-black subtitles (common in DVD content) and white-on-black subtitles (common in Blu-ray PGS) generally read well. Results on subtitles with complex backgrounds or very small text may be imperfect.
 
 ---
 
@@ -392,17 +417,14 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v0.10.0 — OCR for Image-Based Subtitles**
-Tesseract integration for scanning PGS and VOBSUB image tracks in Video Scan — the only remaining gap in video subtitle coverage. Linux binary distribution.
+**v0.11.0 — Whisper Audio Transcription**
+Local AI subtitle generation via Whisper — transcribe audio to subtitles entirely on-device, with SDH mode for deaf and hard of hearing viewers. No cloud, no API keys, no internet required.
 
 **v1.0.0 — Accessibility & Release**
 Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass. Native speaker verification of all 14 language packs.
-
-**Future**
-Local AI subtitle generation via Whisper — transcribe audio to subtitles entirely on-device, with SDH mode for deaf and hard of hearing viewers. Subtitle format conversion.
 
 The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.9.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.10.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

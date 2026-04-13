@@ -1,2 +1,6 @@
 PyQt6>=6.4.0
 pysubs2>=1.6.0
+
+# Optional — required for Image Subs tab (OCR of PGS/VOBSUB subtitle tracks)
+pytesseract>=0.3.10
+Pillow>=10.0.0

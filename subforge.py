@@ -229,8 +229,9 @@ Examples:
         args.gui = True
 
     if args.gui:
-        from gui.settings_dialog import load_language
+        from gui.settings_dialog import load_language, detect_and_save_language
         from gui.strings import set_language
+        detect_and_save_language()
         set_language(load_language())
         from gui.app import launch_gui
         launch_gui(preload=list(args.paths))

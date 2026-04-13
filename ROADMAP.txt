@@ -1,5 +1,5 @@
 SubForge — Development Roadmap
-Last updated: v0.9.0 (complete) — next: v0.10.0
+Last updated: v0.10.0 (complete) — next: v0.11.0
 ================================================================================
 
 COMPLETED
@@ -81,24 +81,55 @@ v0.9.0 — Packaging & Distribution
   - Double-click behaviour: launching with no arguments now opens the GUI
     instead of printing CLI help
 
+v0.10.0 — OCR for Image-Based Subtitles ✓ COMPLETE
+  - Image Subs tab: dedicated tab for scanning PGS and VOBSUB image-based
+    subtitle tracks using Tesseract OCR
+  - PGS path: raw .sup stream extracted via ffmpeg, parsed in pure Python
+    with correct BT.601 limited-range YCbCr conversion and RLE decoder;
+    bitmaps decoded and OCR'd in memory — no video decode required
+  - VOBSUB path: ffmpeg 1fps overlay onto native subtitle canvas resolution
+    (probed per-stream, not assumed from video dimensions), dedup, then OCR
+  - Preprocessing pipeline: alpha-style detection (alpha-only vs colored text),
+    appropriate background composite, bbox crop, 3x upscale
+  - Tesseract garbage output filter ([PIL], isolated punctuation) applied to
+    both PGS and VOBSUB paths
+  - Detection engine runs on OCR output unchanged — same pipeline as text tracks
+  - Save as .srt: OCR'd output saved as [stem].[lang].srt next to video
+  - Remux into video: replace or keep-alongside original image track (MKV via
+    mkvmerge; MP4/M4V via ffmpeg — keep-alongside not available for MP4)
+  - Sensitivity slider on Image Subs tab, respects Settings > General default
+  - Open in Image Subs: Video Scan hands off image-track files directly
+  - Settings > Paths expanded: ffmpeg, ffprobe, Tesseract each have path entries
+  - First-run wizard updated to surface Tesseract alongside FFmpeg and MKVToolNix
+  - Language selector in first-run wizard — restarts app to apply fully
+  - System language auto-detection on first launch
+  - 14 language packs fully updated for all new Image Subs strings
+  - Settings Save/Cancel buttons and sensitivity labels now translatable
+  - What's New button in Settings > About — reads bundled CHANGELOG.md
+  - pytesseract and Pillow bundled in Windows installer via PyInstaller
+  - Experimental warning banner on Image Subs tab
+
 PLANNED
 --------------------------------------------------------------------------------
 
-v0.10.0 — OCR for Image-Based Subtitles
-  - Windows installer appears behind other windows on launch — investigate
-    Inno Setup foreground focus fix (SetupMutex and WindowVisible both tried,
-    neither worked; may require a post-install launcher workaround)
-  - Tesseract integration for PGS/VOBSUB track scanning in Video Scan
-      - PGS frames extracted via ffmpeg to PNG, OCR'd via pytesseract
-      - Detection engine runs on OCR output — same pipeline as text tracks
-      - Cleaned result saveable as sidecar .srt or remuxed as text track
-        replacing the original image track
-      - Image tracks currently listed as ◻ IMAGE with no checkbox — this
-        closes the only remaining gap in Video Scan
-  - First-run wizard (0.9.0) surfaces Tesseract as an optional install
-    alongside FFmpeg and MKVToolNix
-  - pytesseract added to requirements.txt (optional dependency)
-  - Tesseract binary path configurable in Settings > Paths
+v0.11.0 — Whisper Audio Transcription
+  - Whisper AI integration for local, offline subtitle generation from audio
+      - Runs entirely on-device — no cloud, no API keys, no internet required
+        consistent with SubForge's fully local philosophy
+      - User selects a video file; Whisper transcribes audio to subtitle blocks;
+        SubForge's cleaning engine runs on the output
+      - SDH mode: generate with sound descriptions and speaker labels for
+        deaf and hard of hearing viewers
+      - Export as .srt/.ass or remux back into the video
+      - Makes SubForge the only tool that both generates AND cleans subtitles
+        in a single local application
+  - Model selection (tiny/base/small/medium/large) with speed vs accuracy
+    tradeoff explained in plain language
+  - Language detection or manual language selection for transcription
+  - New "Transcribe" tab (or integrated into Video Scan — TBD at design time)
+  - Whisper binary/model path in Settings > Paths
+  - faster-whisper or openai-whisper as backend (TBD — faster-whisper preferred
+    for Windows compatibility and CUDA support)
 
 v1.0.0 — Accessibility, Polish & Release
   - Light theme and high contrast theme (toggle in Settings)
@@ -107,13 +138,40 @@ v1.0.0 — Accessibility, Polish & Release
   - Screen reader compatibility — setAccessibleName/setAccessibleDescription
     on all major widgets (Windows Narrator, macOS VoiceOver)
   - Tooltip audit — every button has one
+  - Windows installer appears behind other windows on launch — Inno Setup
+    foreground focus issue. SetupMutex and WindowVisible both tried without
+    success. May require a post-install launcher workaround.
+  - Tesseract reads music note symbols (♪) as "J" — Tesseract has no glyph
+    for ♪ in its training data and substitutes the nearest Latin character.
+    Options: post-process OCR output replacing isolated "J" near known music
+    context with ♪, or use a custom Tesseract training set. Low priority.
+  - Image Subs sensitivity slider does not update track list colors — when
+    slider is moved, the Track Detail pane re-renders correctly but the tree
+    item color (red/orange/green) does not update to reflect the new threshold.
+    Should call _update_tree_item_color() for all scanned tracks on slider change.
+  - Language change dialog in Settings shows Yes/No buttons that are not
+    translated — the dialog body correctly switches to the newly selected
+    language but the QMessageBox standard buttons remain in the OS language.
+    Fix by replacing QMessageBox.question with a custom dialog using
+    STRINGS-based button labels in the newly selected language.
   - Additional translations — French, Dutch (detection profiles already exist)
-  - CHANGELOG.md in repo, linked from About dialog
   - GitHub Pages documentation site from README with tab screenshots
   - File association on macOS
   - Full test pass: Windows, macOS, Linux
   - Release candidate period before tagging 1.0.0
   - Final branding pass — every string, label, tooltip reviewed
+  - Stop Scan button on Batch and Video Scan — graceful cancellation of an
+    in-progress scan that preserves results collected so far and does not
+    corrupt the report. The current Clear button is not reliable for this.
+    Requires a cancellation flag on the worker thread.
+  - Bottom status bar currently only reflects Single File tab activity — Batch,
+    Video Scan, and Image Subs all manage their own internal status labels and
+    do not update the app-level bar. Wire tab-switching to sync the bottom bar
+    with the active tab's last status, or redesign to use a single shared bar.
+  - Translated READMEs — once the feature set is stable, generate per-language
+    README files (README.es.md, README.fr.md, etc.) in a docs/ folder and link
+    them from the top of the main README. AI-generated to match the 14 language
+    packs. Maintain once, rarely update after 1.0.
 
 
 POST-1.0 — FUTURE FEATURES
@@ -127,22 +185,6 @@ POST-1.0 — FUTURE FEATURES
     just needs testing and re-enabling when the time comes
 --------------------------------------------------------------------------------
 These are real planned features, not wishlist items. Priority order TBD.
-
-  AI-ASSISTED SUBTITLE GENERATION (v1.x — first major post-1.0 feature)
-  - Whisper AI integration for local, offline subtitle generation
-      - Whisper runs entirely on-device — no cloud, no API keys,
-        consistent with SubForge's fully local philosophy
-      - User points at a video file, Whisper transcribes audio to
-        subtitle blocks, SubForge's cleaning engine runs on output
-      - SDH mode: generate with sound descriptions and speaker labels
-        for deaf and hard of hearing viewers — the accessibility angle
-        that no other desktop subtitle tool currently does well
-      - Export directly as .srt/.ass or remux back into the video
-      - This would make SubForge the only tool that both generates
-        AND cleans subtitles in one local application
-  - Model selection (Whisper tiny/base/small/medium/large) with speed
-    vs accuracy tradeoff explained in plain language
-  - Language detection or manual language selection for transcription
 
   SUBTITLE FORMAT CONVERSION
   - SRT ↔ ASS ↔ VTT conversion within the app
