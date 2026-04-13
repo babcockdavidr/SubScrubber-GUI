@@ -13,7 +13,7 @@
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "0.9.0"
+#define AppVersion   "0.10.0"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"
