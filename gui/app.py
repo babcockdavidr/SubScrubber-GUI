@@ -473,7 +473,8 @@ class MainWindow(QMainWindow):
         self._status = QStatusBar()
         self.setStatusBar(self._status)
         self._status.showMessage(STRINGS["msg_ready"])
-        self._version_label = QLabel(STRINGS["app_version"])
+        from core.updater import CURRENT_VERSION
+        self._version_label = QLabel(CURRENT_VERSION)
         self._version_label.setStyleSheet(f"color: {FG2}; font-size: 9pt; padding-right: 6px;")
         self._btn_check_updates = QPushButton(STRINGS["app_btn_check_updates"])
         self._btn_check_updates.setStyleSheet(
@@ -708,7 +709,12 @@ class MainWindow(QMainWindow):
         self._video_panel = VideoScanPanel()
         self._tabs.addTab(self._video_panel, STRINGS["tab_video_scan"])
 
-        # Tab 5: Regex profile editor
+        # Tab 5: Image Subs (OCR pipeline for PGS/VOBSUB tracks)
+        from .image_subs_panel import ImageSubsPanel
+        self._image_subs_panel = ImageSubsPanel()
+        self._tabs.addTab(self._image_subs_panel, STRINGS["tab_image_subs"])
+
+        # Tab 6: Regex profile editor
         from .regex_editor import RegexEditorPanel
         self._regex_editor = RegexEditorPanel()
         self._tabs.addTab(self._regex_editor, STRINGS["tab_regex_editor"])
@@ -733,6 +739,7 @@ class MainWindow(QMainWindow):
 
         # Cross-panel wiring
         self._batch_panel.open_file_requested.connect(self._open_file_in_review)
+        self._video_panel.open_in_image_subs.connect(self._open_in_image_subs)
         self._regex_editor.pattern_saved.connect(self._on_pattern_saved)
         self._btn_always_ad.clicked.connect(self._always_mark_as_ad)
         self._btn_settings.clicked.connect(self._open_settings)
@@ -1129,6 +1136,16 @@ class MainWindow(QMainWindow):
                 break
         # Switch to Review tab (index 0)
         self._tabs.setCurrentIndex(0)
+
+    def _open_in_image_subs(self, path: Path):
+        """Called by video panel — open a video file in the Image Subs tab."""
+        self._image_subs_panel.load_video(path)
+        # Image Subs is tab index 4 (0=Single File, 1=Batch, 2=Video Scan... wait,
+        # use tab widget lookup so index never goes stale)
+        for i in range(self._tabs.count()):
+            if self._tabs.widget(i) is self._image_subs_panel:
+                self._tabs.setCurrentIndex(i)
+                break
 
     # ── Always Mark as Ad ────────────────────────────────────────────────────
 

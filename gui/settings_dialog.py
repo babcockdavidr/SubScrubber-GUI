@@ -17,7 +17,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QCheckBox, QPushButton, QLineEdit, QFileDialog,
-    QDialogButtonBox, QGroupBox, QScrollArea, QFrame,
+    QGroupBox, QScrollArea, QFrame,
 )
 
 import sys
@@ -80,6 +80,28 @@ def get_language() -> str:
     """Return currently active language code."""
     from .strings import get_language as _get
     return _get()
+
+
+def detect_and_save_language() -> str:
+    """
+    Auto-detect OS locale on first launch and save it if no language is set.
+    Returns the language code that was set (existing or newly detected).
+    """
+    s = _load_settings()
+    if "language" in s:
+        return s["language"]  # already set — don't override
+
+    from PyQt6.QtCore import QLocale
+    from .strings import LANGUAGES
+    locale_name = QLocale.system().name()  # e.g. "es_ES", "fr_FR"
+    lang_code = locale_name.split("_")[0].lower()  # e.g. "es", "fr"
+
+    if lang_code not in LANGUAGES:
+        lang_code = "en"
+
+    s["language"] = lang_code
+    _save_settings(s)
+    return lang_code
 
 
 def load_cleaning_options() -> CleaningOptions:
@@ -153,22 +175,32 @@ class SettingsDialog(QDialog):
         self._build_paths_tab()
         self._build_about_tab()
 
-        # Dialog buttons
-        btn_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save |
-            QDialogButtonBox.StandardButton.Cancel
+        # Dialog buttons — manual buttons so text is translatable
+        btn_bar = QHBoxLayout()
+        btn_bar.setContentsMargins(12, 0, 12, 0)
+        btn_bar.addStretch()
+        self._btn_cancel = QPushButton(STRINGS["settings_btn_cancel"])
+        self._btn_cancel.setStyleSheet(
+            f"padding: 6px 18px; font-size: 10pt; color: {FG2}; "
+            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
-        btn_box.setContentsMargins(12, 0, 12, 0)
-        btn_box.accepted.connect(self._save)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
-        self._btn_box = btn_box
+        self._btn_cancel.clicked.connect(self.reject)
+        self._btn_save = QPushButton(STRINGS["settings_btn_save"])
+        self._btn_save.setStyleSheet(
+            f"padding: 6px 18px; font-size: 10pt; color: {BG}; "
+            f"border: none; border-radius: 3px; background: {ACCENT};"
+        )
+        self._btn_save.clicked.connect(self._save)
+        btn_bar.addWidget(self._btn_cancel)
+        btn_bar.addWidget(self._btn_save)
+        layout.addLayout(btn_bar)
+        self._btn_bar_widget = (self._btn_save, self._btn_cancel)
 
         # Hide Save/Cancel when on About tab
         self._tabs.currentChanged.connect(
-            lambda i: self._btn_box.setVisible(
-                self._tabs.tabText(i) != "About"
-            )
+            lambda i: [w.setVisible(
+                self._tabs.tabText(i) != STRINGS["settings_tab_about"]
+            ) for w in self._btn_bar_widget]
         )
 
         # Load current values
@@ -214,11 +246,11 @@ class SettingsDialog(QDialog):
         self._sens_slider.setFixedWidth(200)
 
         _labels = {
-            1: "Very Aggressive",
-            2: "Aggressive",
-            3: "Balanced (default)",
-            4: "Conservative",
-            5: "Very Conservative",
+            1: STRINGS["thresh_1"],
+            2: STRINGS["thresh_2"],
+            3: STRINGS["thresh_3"],
+            4: STRINGS["thresh_4"],
+            5: STRINGS["thresh_5"],
         }
         self._lbl_sens_val = QLabel(_labels.get(self._sens_slider.value(), ""))
         self._lbl_sens_val.setStyleSheet(f"color: {YELLOW}; font-size: 10pt;")
@@ -468,14 +500,26 @@ class SettingsDialog(QDialog):
         btn_issue.clicked.connect(lambda: webbrowser.open(
             "https://github.com/babcockdavidr/SubForge/issues/new"
         ))
+        btn_whats_new = QPushButton(STRINGS["settings_btn_whats_new"])
+        btn_whats_new.setStyleSheet(
+            f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
+            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
+        )
+        btn_whats_new.clicked.connect(self._show_changelog)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
+        btn_row.addWidget(btn_whats_new)
         btn_row.addWidget(btn_issue)
         outer.addLayout(btn_row)
 
         self._tabs.addTab(tab, STRINGS["settings_tab_about"])
 
     # ── Paths tab ────────────────────────────────────────────────────────
+
+    def _show_changelog(self):
+        from gui.changelog_dialog import ChangelogDialog
+        dlg = ChangelogDialog(self)
+        dlg.exec()
 
     def _build_paths_tab(self):
         tab = QWidget()

@@ -552,6 +552,7 @@ class VideoDropZone(QFrame):
 # ---------------------------------------------------------------------------
 
 class VideoScanPanel(QWidget):
+    open_in_image_subs = pyqtSignal(Path)   # emitted when user clicks "Open in Image Subs"
     def __init__(self, parent=None):
         super().__init__(parent)
         self._results:  List[VideoScanResult] = []
@@ -709,6 +710,17 @@ class VideoScanPanel(QWidget):
         rl.setSpacing(4)
         lbl_detail = QLabel(STRINGS["video_lbl_detail"])
         lbl_detail.setObjectName("section_label")
+
+        # "Open in Image Subs" button — shown only when an image track is selected
+        self._btn_open_image_subs = QPushButton(STRINGS["img_btn_open_image_subs"])
+        self._btn_open_image_subs.setObjectName("btn_clean_all")
+        self._btn_open_image_subs.setVisible(False)
+        self._btn_open_image_subs.setToolTip(
+            "Send this video file to the Image Subs tab to scan "
+            "its image-based subtitle tracks with Tesseract OCR."
+        )
+        self._btn_open_image_subs.clicked.connect(self._open_current_in_image_subs)
+
         self._detail_text = QTextBrowser()
         self._detail_text.setFont(QFont("Consolas", 11))
         self._detail_text.setOpenExternalLinks(False)
@@ -716,6 +728,7 @@ class VideoScanPanel(QWidget):
             f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; border-radius: 4px;"
         )
         rl.addWidget(lbl_detail)
+        rl.addWidget(self._btn_open_image_subs)
         rl.addWidget(self._detail_text)
 
         splitter.addWidget(left)
@@ -1025,12 +1038,21 @@ class VideoScanPanel(QWidget):
             self._current_result = data[1]
             self._current_track  = None
             self._detail_text.setHtml(_video_html(data[1], self._threshold))
+            # Show button if this video has any image tracks
+            has_image = any(t.is_image for t in data[1].tracks)
+            self._btn_open_image_subs.setVisible(has_image)
         elif data[0] == "track":
             self._current_result = data[1]
             self._current_track  = data[2]
             self._detail_text.setHtml(
                 _track_html(data[1], data[2], self._threshold)
             )
+            # Show button whenever the selected track is image-based
+            self._btn_open_image_subs.setVisible(data[2].is_image)
+
+    def _open_current_in_image_subs(self):
+        if self._current_result:
+            self.open_in_image_subs.emit(self._current_result.path)
 
     def _on_detail_link(self, url):
         """Handle 'keep:block_id' links from the detail pane."""
