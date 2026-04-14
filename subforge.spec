@@ -103,8 +103,8 @@ app = BUNDLE(
     name="SubForge.app",
     bundle_identifier="com.babcockdavidr.subforge",
     info_plist={
-        "CFBundleShortVersionString": "0.12.0",
-        "CFBundleVersion":            "0.12.0",
+        "CFBundleShortVersionString": "0.13.0",
+        "CFBundleVersion":            "0.13.0",
         "NSHighResolutionCapable":    True,
         "LSMinimumSystemVersion":     "10.15",
     },

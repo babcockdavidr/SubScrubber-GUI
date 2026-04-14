@@ -1,4 +1,4 @@
-# SubForge — v0.12.0: Inline Editing & Diagnostics
+# SubForge — v0.13.0: Stability, Scan Control & Tooltip Audit
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,11 +10,14 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.12.0 — Inline Editing & Diagnostics
-- **Transcribe tab: inline editing** — after transcription completes, all subtitle blocks are displayed in an editable table showing index, timestamp, and text. Click any text cell to correct it directly. Edits are applied immediately — Save as .srt and Remux both use your corrected output.
-- **Error log viewer** — a new "View Error Log" button in Settings > About opens a scrollable log of any errors SubForge has encountered. Includes the originating tab, a UTC timestamp, and the full traceback for each entry. A "Clear Log" button resets it.
-- **Unified error logging** — errors from all parts of the app now append to a single persistent log file instead of overwriting it. The log lives in `%APPDATA%\SubForge\subforge_errors.log` (installer) or the repo root (source).
-- **14 language packs updated** — all new strings across both features are fully translated.
+### v0.13.0 — Stability, Scan Control & Tooltip Audit
+- **Stop Scan button** — Batch and Video Scan both now have a Stop Scan button that appears during an active scan. Clicking it stops the scan immediately and preserves all results collected so far — nothing is lost and no files are corrupted. The Clear button was never designed for this, so Stop Scan fills the gap properly.
+- **Status bar unification** — the status bar at the bottom of the window now reflects the active tab at all times. Previously it only updated on the Single File tab; Batch, Video Scan, Image Subs, and Transcribe all managed their own internal status labels. Now switching tabs syncs the bar to that tab's last message, and all activity updates it live.
+- **Image Subs sensitivity slider now recolors all tracks** — moving the slider previously updated the detail pane for the selected track but left all other track colors in the tree stale. All scanned tracks now recolor correctly at the new threshold when the slider moves.
+- **Language change dialog button translation** — the Yes/No buttons in the restart prompt after changing language were always in the OS language, regardless of what language you had just selected. The dialog now uses SubForge's own translated button labels, so the prompt appears correctly in the newly selected language.
+- **Tooltip audit** — every button in the app now has a tooltip. All tooltip text goes through the translation system and is available in all 14 supported languages.
+- **Startup crash fix (faster-whisper)** — SubForge would crash on launch when faster-whisper was installed, because the `transformers` library it depends on tries to access `sys.stderr` at import time, which is `None` in a windowed application. The availability check now temporarily stubs out the null streams before importing so the check completes cleanly.
+- **14 language packs updated** — all new strings for this release are fully translated.
 
 ---
 
@@ -423,4 +426,4 @@ The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.12.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.13.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

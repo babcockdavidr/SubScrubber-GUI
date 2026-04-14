@@ -1,54 +1,47 @@
 SubForge — Development Roadmap
-Last updated: v0.12.0 (complete) — next: v1.0.0
+Last updated: v0.13.0 (complete) — next: v1.0.0
 ================================================================================
 
-COMPLETED
---------------------------------------------------------------------------------
-v0.12.0 — Transcribe Inline Editing + Diagnostics ✓ COMPLETE
-  - Transcribe tab inline editing: after transcription, all subtitle blocks
-    are shown in an editable QTableWidget (index, timestamp, text per row)
-  - Click any text cell to edit; edits sync back to block.content immediately
-  - Save as .srt and Remux use the edited output — transcription errors can
-    be corrected before saving or remuxing
-  - QStackedWidget: browser page (idle/progress/error) swaps to table page
-    on success; resets on Clear or new transcription
-  - core/logger.py: centralised error logging — append_error(), read_log(),
-    clear_log(), get_log_path(); appends entries instead of overwriting;
-    each entry has UTC timestamp, source tab, and full traceback
-  - Log path follows core/paths.USER_DIR — %APPDATA%\SubForge\subforge_errors.log
-    on Windows (frozen or source), ~/SubForge/subforge_errors.log elsewhere
-  - All error catch sites in app.py and regex_editor.py now call append_error()
-    instead of writing directly — errors accumulate across a session
-  - Settings > About tab: "View Error Log" button opens a read-only dialog
-    showing log contents with path label; "Clear Log" button to reset
-  - All 14 language packs updated for all new strings
+0.13.0 — Stability, Scan Control & Tooltip Audit
 
-v0.11.0 — Whisper Audio Transcription ✓ COMPLETE
-  - Transcribe tab: dedicated tab for generating subtitles from video audio
-    using faster-whisper AI, running fully offline with no API keys required
-  - Model selection: tiny / base / small / medium / large with plain-language
-    speed vs. accuracy descriptions; downloaded models marked with ✓
-  - Language selection: auto-detect or manual ISO language code
-  - SDH mode: non-speech audio annotations (music, applause, etc.) included
-    when enabled; suppress_tokens and vad_filter tuned per mode
-  - Save as .srt: write transcribed output as [stem].[lang].srt next to video
-  - Remux into video: add transcribed track to MKV (mkvmerge) or MP4 (ffmpeg)
-    alongside existing tracks
-  - Settings > Paths: Whisper model directory entry (browse for folder;
-    blank = default location in SubForge data dir)
-  - CUDA GPU acceleration when torch + CUDA available; falls back to CPU int8
-  - Subprocess isolation: transcription runs in a separate Python process to
-    prevent CTranslate2 native libraries from conflicting with Qt's runtime
-  - Flat model storage: models stored without HF Hub symlinks for compatibility
-    with Windows machines that don't have Developer Mode enabled
-  - 14 language packs fully updated for all new Transcribe tab strings
-  - core/whisper.py: path/model management, transcription pipeline, SDH
-    segment detection, SRT assembly — all independent of GUI
+  NEEDS TESTING (implemented, not yet verified on Windows):
+  - Stop Scan button on Batch and Video Scan — cancellation flag on worker
+    thread; partial results preserved and displayed. Verify: Stop button
+    appears during scan, hides on completion or cancel; partial results
+    populate correctly; no crash when cancelled with 0 results processed.
+    STATUS: Confirmed working ✓
+  - Image Subs sensitivity slider tree color update — _refresh_tree_colors()
+    iterates all tree items and recomputes from regex_matches at the current
+    threshold. Verify: all scanned tracks recolor when slider moves, not just
+    the selected one; unscanned tracks stay grey.
+    STATUS: Confirmed working ✓
+  - Language change dialog button translation — replaced QMessageBox.question
+    with a custom QDialog using STRINGS-based labels. Verify: change language
+    in Settings, confirm both "Restart Now" and "Not Now" buttons render in
+    the newly selected language, not the OS language.
+    STATUS: Confirmed working ✓
+  - Tooltip audit — 45 tooltip keys added to all 14 language dicts and wired
+    to every button across all panels. Six previously hardcoded tooltips
+    migrated to STRINGS. Verify: hover over buttons, confirm tooltips appear.
+    STATUS: Confirmed working ✓ (spot-tested)
+  - faster_whisper crash on launch — sys.stderr is None in windowed apps;
+    guarded in faster_whisper_available() with a temporary io.StringIO stub.
+    STATUS: Confirmed working ✓
+  - Bottom status bar unification — Batch, Video Scan, Image Subs, and
+    Transcribe panels now emit status_updated signal; MainWindow wires these
+    to the app-level QStatusBar. Tab switching syncs bar via get_status().
+    Internal _lbl_status labels removed from all four panels.
+    Verify: status bar updates on all four non-Single-File tabs; switching
+    tabs syncs the bar to the newly active tab's last message; Single File
+    tab unaffected.
+  - OCR temp directory cleanup error on exit — added ignore_cleanup_errors=True
+    to all four TemporaryDirectory() calls in core/ocr.py.
+    Verify: closing app mid-OCR-scan no longer logs an OSError in the shell.
+  - Stop Scan + restart dialog + tooltip strings — new keys in all 14
+    language dicts. Verify at least EN, ES, and one non-Latin script.
 
-PLANNED
---------------------------------------------------------------------------------
 
-v1.0.0 — Accessibility, Polish & Release
+1.0.0 — Accessibility, Polish & Release
   - Multi-thread support for faster scanning — all tabs (Batch, Video Scan,
     Image Subs) should process files/tracks in parallel using
     concurrent.futures.ThreadPoolExecutor. Default thread count = CPU count,
@@ -63,7 +56,6 @@ v1.0.0 — Accessibility, Polish & Release
   - Keyboard navigation audit — every action reachable without mouse
   - Screen reader compatibility — setAccessibleName/setAccessibleDescription
     on all major widgets (Windows Narrator, macOS VoiceOver)
-  - Tooltip audit — every button has one
   - Windows installer appears behind other windows on launch — Inno Setup
     foreground focus issue. SetupMutex and WindowVisible both tried without
     success. May require a post-install launcher workaround.
@@ -71,29 +63,12 @@ v1.0.0 — Accessibility, Polish & Release
     for ♪ in its training data and substitutes the nearest Latin character.
     Options: post-process OCR output replacing isolated "J" near known music
     context with ♪, or use a custom Tesseract training set. Low priority.
-  - Image Subs sensitivity slider does not update track list colors — when
-    slider is moved, the Track Detail pane re-renders correctly but the tree
-    item color (red/orange/green) does not update to reflect the new threshold.
-    Should call _update_tree_item_color() for all scanned tracks on slider change.
-  - Language change dialog in Settings shows Yes/No buttons that are not
-    translated — the dialog body correctly switches to the newly selected
-    language but the QMessageBox standard buttons remain in the OS language.
-    Fix by replacing QMessageBox.question with a custom dialog using
-    STRINGS-based button labels in the newly selected language.
   - Additional translations — French, Dutch (detection profiles already exist)
   - GitHub Pages documentation site from README with tab screenshots
   - File association on macOS
   - Full test pass: Windows, macOS, Linux
   - Release candidate period before tagging 1.0.0
   - Final branding pass — every string, label, tooltip reviewed
-  - Stop Scan button on Batch and Video Scan — graceful cancellation of an
-    in-progress scan that preserves results collected so far and does not
-    corrupt the report. The current Clear button is not reliable for this.
-    Requires a cancellation flag on the worker thread.
-  - Bottom status bar currently only reflects Single File tab activity — Batch,
-    Video Scan, and Image Subs all manage their own internal status labels and
-    do not update the app-level bar. Wire tab-switching to sync the bottom bar
-    with the active tab's last status, or redesign to use a single shared bar.
   - Translated READMEs — once the feature set is stable, generate per-language
     README files (README.es.md, README.fr.md, etc.) in a docs/ folder and link
     them from the top of the main README. AI-generated to match the 14 language
