@@ -2,46 +2,7 @@ SubForge — Development Roadmap
 Last updated: v0.13.0 (complete) — next: v1.0.0
 ================================================================================
 
-0.13.0 — Stability, Scan Control & Tooltip Audit
-
-  NEEDS TESTING (implemented, not yet verified on Windows):
-  - Stop Scan button on Batch and Video Scan — cancellation flag on worker
-    thread; partial results preserved and displayed. Verify: Stop button
-    appears during scan, hides on completion or cancel; partial results
-    populate correctly; no crash when cancelled with 0 results processed.
-    STATUS: Confirmed working ✓
-  - Image Subs sensitivity slider tree color update — _refresh_tree_colors()
-    iterates all tree items and recomputes from regex_matches at the current
-    threshold. Verify: all scanned tracks recolor when slider moves, not just
-    the selected one; unscanned tracks stay grey.
-    STATUS: Confirmed working ✓
-  - Language change dialog button translation — replaced QMessageBox.question
-    with a custom QDialog using STRINGS-based labels. Verify: change language
-    in Settings, confirm both "Restart Now" and "Not Now" buttons render in
-    the newly selected language, not the OS language.
-    STATUS: Confirmed working ✓
-  - Tooltip audit — 45 tooltip keys added to all 14 language dicts and wired
-    to every button across all panels. Six previously hardcoded tooltips
-    migrated to STRINGS. Verify: hover over buttons, confirm tooltips appear.
-    STATUS: Confirmed working ✓ (spot-tested)
-  - faster_whisper crash on launch — sys.stderr is None in windowed apps;
-    guarded in faster_whisper_available() with a temporary io.StringIO stub.
-    STATUS: Confirmed working ✓
-  - Bottom status bar unification — Batch, Video Scan, Image Subs, and
-    Transcribe panels now emit status_updated signal; MainWindow wires these
-    to the app-level QStatusBar. Tab switching syncs bar via get_status().
-    Internal _lbl_status labels removed from all four panels.
-    Verify: status bar updates on all four non-Single-File tabs; switching
-    tabs syncs the bar to the newly active tab's last message; Single File
-    tab unaffected.
-  - OCR temp directory cleanup error on exit — added ignore_cleanup_errors=True
-    to all four TemporaryDirectory() calls in core/ocr.py.
-    Verify: closing app mid-OCR-scan no longer logs an OSError in the shell.
-  - Stop Scan + restart dialog + tooltip strings — new keys in all 14
-    language dicts. Verify at least EN, ES, and one non-Latin script.
-
-
-1.0.0 — Accessibility, Polish & Release
+Upcoming Release: 1.0.0 — Accessibility, Polish & Release
   - Multi-thread support for faster scanning — all tabs (Batch, Video Scan,
     Image Subs) should process files/tracks in parallel using
     concurrent.futures.ThreadPoolExecutor. Default thread count = CPU count,
