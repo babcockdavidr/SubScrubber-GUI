@@ -11,7 +11,7 @@ import urllib.request
 import json
 from typing import Optional, Tuple
 
-CURRENT_VERSION = "v0.10.0"
+CURRENT_VERSION = "v0.11.0"
 GITHUB_API_URL  = "https://api.github.com/repos/babcockdavidr/SubForge/releases/latest"
 RELEASES_URL    = "https://github.com/babcockdavidr/SubForge/releases"
 
