@@ -26,6 +26,7 @@ import webbrowser
 
 from core.cleaner_options import CleaningOptions
 from core.mkvtoolnix import get_mkvmerge_path, set_mkvmerge_path, mkvmerge_available
+from core.whisper import get_model_dir, set_model_dir, clear_model_dir
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .strings import STRINGS
 
@@ -154,7 +155,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(STRINGS["settings_title"])
-        self.setMinimumWidth(580)
+        self.setMinimumWidth(740)
         self.setMinimumHeight(520)
         self.setStyleSheet(f"QDialog {{ background: {BG}; color: {FG}; }}")
 
@@ -522,58 +523,154 @@ class SettingsDialog(QDialog):
         dlg.exec()
 
     def _build_paths_tab(self):
+        from core.ffprobe import get_ffmpeg_path, get_ffprobe_path, ffmpeg_available, ffprobe_available
+        from core.ocr import get_tesseract_path, tesseract_available
+
         tab = QWidget()
         tab.setStyleSheet(f"background: {BG};")
-        outer = QVBoxLayout(tab)
+
+        # Scrollable so all groups fit on small screens — vertical only
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet(f"background: {BG};")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        inner_widget = QWidget()
+        inner_widget.setStyleSheet(f"background: {BG};")
+        outer = QVBoxLayout(inner_widget)
         outer.setContentsMargins(16, 16, 16, 8)
         outer.setSpacing(16)
 
-        # MKVToolNix
-        grp = QGroupBox(STRINGS["settings_grp_mkv"])
-        grp.setStyleSheet(
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.addWidget(scroll)
+        scroll.setWidget(inner_widget)
+
+        _grp_style = (
             f"QGroupBox {{ border: 1px solid {BORDER}; border-radius: 4px; "
             f"color: {FG2}; margin-top: 8px; padding-top: 6px; }}"
             f"QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}"
         )
-        gl = QVBoxLayout(grp)
-
-        info = QLabel(STRINGS["settings_mkv_info"])
-        info.setWordWrap(True)
-        info.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
-
-        path_row = QHBoxLayout()
-        self._mkv_path_input = QLineEdit()
-        self._mkv_path_input.setPlaceholderText(STRINGS["settings_mkv_placeholder"])
-        self._mkv_path_input.setStyleSheet(
+        _input_style = (
             f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
             f"border-radius: 3px; padding: 4px;"
         )
-        current = get_mkvmerge_path()
-        if current:
-            self._mkv_path_input.setText(current)
 
-        btn_browse = QPushButton(STRINGS["settings_browse"])
-        btn_browse.clicked.connect(self._browse_mkvmerge)
-        path_row.addWidget(self._mkv_path_input, stretch=1)
-        path_row.addWidget(btn_browse)
+        def _make_path_group(title, info_text, placeholder, current_val, browse_fn):
+            """Build a standard tool path group. Returns (grp, input, status_lbl)."""
+            from PyQt6.QtWidgets import QSizePolicy
+            grp = QGroupBox(title)
+            grp.setStyleSheet(_grp_style)
+            gl = QVBoxLayout(grp)
+            info = QLabel(info_text)
+            info.setWordWrap(True)
+            info.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+            path_row = QHBoxLayout()
+            inp = QLineEdit()
+            inp.setPlaceholderText(placeholder)
+            inp.setStyleSheet(_input_style)
+            if current_val:
+                inp.setText(current_val)
+            btn = QPushButton(STRINGS["settings_browse"])
+            btn.clicked.connect(browse_fn)
+            path_row.addWidget(inp, stretch=1)
+            path_row.addWidget(btn)
+            lbl = QLabel("")
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("font-size: 10pt;")
+            lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            gl.addWidget(info)
+            gl.addLayout(path_row)
+            gl.addWidget(lbl)
+            return grp, inp, lbl
 
-        self._lbl_mkv_status = QLabel("")
-        self._lbl_mkv_status.setStyleSheet("font-size: 10pt;")
+        # ── MKVToolNix ────────────────────────────────────────────────────
+        grp, self._mkv_path_input, self._lbl_mkv_status = _make_path_group(
+            STRINGS["settings_grp_mkv"],
+            STRINGS["settings_mkv_info"],
+            STRINGS["settings_mkv_placeholder"],
+            get_mkvmerge_path() or "",
+            self._browse_mkvmerge,
+        )
+        outer.addWidget(grp)
+        self._mkv_path_input.textChanged.connect(self._update_mkv_status)
         self._update_mkv_status()
 
-        gl.addWidget(info)
-        gl.addLayout(path_row)
-        gl.addWidget(self._lbl_mkv_status)
+        # ── FFmpeg ────────────────────────────────────────────────────────
+        grp, self._ffmpeg_path_input, self._lbl_ffmpeg_status = _make_path_group(
+            STRINGS["settings_grp_ffmpeg"],
+            STRINGS["settings_ffmpeg_info"],
+            STRINGS["settings_ffmpeg_placeholder"],
+            get_ffmpeg_path() or "",
+            self._browse_ffmpeg,
+        )
         outer.addWidget(grp)
-        outer.addStretch()
+        self._ffmpeg_path_input.textChanged.connect(self._update_ffmpeg_status)
+        self._update_ffmpeg_status()
 
-        self._mkv_path_input.textChanged.connect(self._update_mkv_status)
+        # ── FFprobe ───────────────────────────────────────────────────────
+        grp, self._ffprobe_path_input, self._lbl_ffprobe_status = _make_path_group(
+            STRINGS["settings_grp_ffprobe"],
+            STRINGS["settings_ffprobe_info"],
+            STRINGS["settings_ffprobe_placeholder"],
+            get_ffprobe_path() or "",
+            self._browse_ffprobe,
+        )
+        outer.addWidget(grp)
+        self._ffprobe_path_input.textChanged.connect(self._update_ffprobe_status)
+        self._update_ffprobe_status()
+
+        # ── Tesseract OCR ─────────────────────────────────────────────────
+        grp, self._tess_path_input, self._lbl_tess_status = _make_path_group(
+            STRINGS["settings_grp_tesseract"],
+            STRINGS["settings_tesseract_info"],
+            STRINGS["settings_tesseract_placeholder"],
+            get_tesseract_path() or "",
+            self._browse_tesseract,
+        )
+        outer.addWidget(grp)
+        self._tess_path_input.textChanged.connect(self._update_tess_status)
+        self._update_tess_status()
+
+        # ── Whisper Model Directory ───────────────────────────────────────
+        from core.paths import USER_DIR
+        _default_whisper = USER_DIR / "whisper_models"
+        _current_whisper = get_model_dir()
+        _whisper_display = str(_current_whisper) if _current_whisper != _default_whisper else ""
+
+        wgrp = QGroupBox(STRINGS["settings_grp_whisper"])
+        wgrp.setStyleSheet(_grp_style)
+        wgl = QVBoxLayout(wgrp)
+        winfo = QLabel(STRINGS["settings_whisper_info"])
+        winfo.setWordWrap(True)
+        winfo.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        wpath_row = QHBoxLayout()
+        self._whisper_dir_input = QLineEdit()
+        self._whisper_dir_input.setPlaceholderText(STRINGS["settings_whisper_placeholder"])
+        self._whisper_dir_input.setStyleSheet(_input_style)
+        if _whisper_display:
+            self._whisper_dir_input.setText(_whisper_display)
+        btn_browse_whisper = QPushButton(STRINGS["settings_browse"])
+        btn_browse_whisper.clicked.connect(self._browse_whisper_dir)
+        wpath_row.addWidget(self._whisper_dir_input, stretch=1)
+        wpath_row.addWidget(btn_browse_whisper)
+        self._lbl_whisper_status = QLabel("")
+        self._lbl_whisper_status.setWordWrap(True)
+        self._lbl_whisper_status.setStyleSheet("font-size: 10pt;")
+        wgl.addWidget(winfo)
+        wgl.addLayout(wpath_row)
+        wgl.addWidget(self._lbl_whisper_status)
+        outer.addWidget(wgrp)
+        self._whisper_dir_input.textChanged.connect(self._update_whisper_status)
+        self._update_whisper_status()
+
+        outer.addStretch()
         self._tabs.addTab(tab, STRINGS["settings_tab_paths"])
 
     def _browse_mkvmerge(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Find mkvmerge.exe", "",
-            "mkvmerge (mkvmerge.exe);;All Files (*)"
+            self, "Find mkvmerge", "",
+            "mkvmerge (mkvmerge mkvmerge.exe);;All Files (*)"
         )
         if path:
             self._mkv_path_input.setText(path)
@@ -592,10 +689,135 @@ class SettingsDialog(QDialog):
             )
             self._lbl_mkv_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
         else:
-            self._lbl_mkv_status.setText(
-                STRINGS["settings_mkv_missing"]
-            )
+            self._lbl_mkv_status.setText(STRINGS["settings_mkv_missing"])
             self._lbl_mkv_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+
+    def _browse_ffmpeg(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Find ffmpeg", "",
+            "ffmpeg (ffmpeg ffmpeg.exe);;All Files (*)"
+        )
+        if path:
+            self._ffmpeg_path_input.setText(path)
+
+    def _update_ffmpeg_status(self):
+        from core.ffprobe import get_ffmpeg_path, ffmpeg_available, set_ffmpeg_path
+        path = self._ffmpeg_path_input.text().strip()
+        if path and Path(path).is_file():
+            self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_found"])
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        elif path:
+            self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_not_found"])
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+        elif ffmpeg_available():
+            self._lbl_ffmpeg_status.setText(
+                STRINGS["settings_tool_on_path"].format(path=get_ffmpeg_path())
+            )
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        else:
+            self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_missing_ffmpeg"])
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+
+    def _browse_ffprobe(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Find ffprobe", "",
+            "ffprobe (ffprobe ffprobe.exe);;All Files (*)"
+        )
+        if path:
+            self._ffprobe_path_input.setText(path)
+
+    def _update_ffprobe_status(self):
+        from core.ffprobe import get_ffprobe_path, ffprobe_available
+        path = self._ffprobe_path_input.text().strip()
+        if path and Path(path).is_file():
+            self._lbl_ffprobe_status.setText(STRINGS["settings_tool_found"])
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        elif path:
+            self._lbl_ffprobe_status.setText(STRINGS["settings_tool_not_found"])
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+        elif ffprobe_available():
+            self._lbl_ffprobe_status.setText(
+                STRINGS["settings_tool_on_path"].format(path=get_ffprobe_path())
+            )
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        else:
+            self._lbl_ffprobe_status.setText(STRINGS["settings_tool_missing_ffprobe"])
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+
+    def _browse_tesseract(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Find Tesseract", "",
+            "Tesseract (tesseract tesseract.exe);;All Files (*)"
+        )
+        if path:
+            self._tess_path_input.setText(path)
+
+    def _update_tess_status(self):
+        from core.ocr import get_tesseract_path, tesseract_available, set_tesseract_path
+        path = self._tess_path_input.text().strip()
+        if path and Path(path).is_file():
+            self._lbl_tess_status.setText(STRINGS["settings_tool_found"])
+            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        elif path:
+            self._lbl_tess_status.setText(STRINGS["settings_tool_not_found"])
+            self._lbl_tess_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+        elif tesseract_available():
+            self._lbl_tess_status.setText(
+                STRINGS["settings_tool_on_path"].format(path=get_tesseract_path())
+            )
+            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+        else:
+            self._lbl_tess_status.setText(STRINGS["settings_tesseract_missing"])
+            self._lbl_tess_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+
+    def _browse_whisper_dir(self):
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Whisper Model Directory", ""
+        )
+        if path:
+            self._whisper_dir_input.setText(path)
+
+    def _update_whisper_status(self):
+        from core.paths import USER_DIR
+        from core.whisper import faster_whisper_available
+        _default  = USER_DIR / "whisper_models"
+        path_text = self._whisper_dir_input.text().strip()
+
+        # faster-whisper not installed takes priority over path state
+        if not faster_whisper_available():
+            suffix = "  Install with: pip install faster-whisper"
+            if path_text:
+                p = Path(path_text)
+                if p.is_dir():
+                    self._lbl_whisper_status.setText(
+                        STRINGS["settings_whisper_custom"].format(path=path_text) + suffix
+                    )
+                else:
+                    self._lbl_whisper_status.setText(
+                        STRINGS["settings_whisper_not_found"] + suffix
+                    )
+            else:
+                self._lbl_whisper_status.setText(
+                    STRINGS["settings_whisper_default"].format(path=str(_default)) + suffix
+                )
+            self._lbl_whisper_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            return
+
+        if path_text:
+            p = Path(path_text)
+            if p.is_dir():
+                self._lbl_whisper_status.setText(
+                    STRINGS["settings_whisper_custom"].format(path=path_text)
+                )
+                self._lbl_whisper_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            else:
+                self._lbl_whisper_status.setText(STRINGS["settings_whisper_not_found"])
+                self._lbl_whisper_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+        else:
+            self._lbl_whisper_status.setText(
+                STRINGS["settings_whisper_default"].format(path=str(_default))
+            )
+            self._lbl_whisper_status.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
 
     # ── Load / Save ───────────────────────────────────────────────────────
 
@@ -648,6 +870,27 @@ class SettingsDialog(QDialog):
         path = self._mkv_path_input.text().strip()
         if path:
             set_mkvmerge_path(path)
+
+        from core.ffprobe import set_ffmpeg_path, set_ffprobe_path
+        from core.ocr import set_tesseract_path
+
+        ffmpeg_path = self._ffmpeg_path_input.text().strip()
+        if ffmpeg_path:
+            set_ffmpeg_path(ffmpeg_path)
+
+        ffprobe_path = self._ffprobe_path_input.text().strip()
+        if ffprobe_path:
+            set_ffprobe_path(ffprobe_path)
+
+        tess_path = self._tess_path_input.text().strip()
+        if tess_path:
+            set_tesseract_path(tess_path)
+
+        whisper_dir = self._whisper_dir_input.text().strip()
+        if whisper_dir:
+            set_model_dir(whisper_dir)
+        else:
+            clear_model_dir()
 
         self.accept()
 

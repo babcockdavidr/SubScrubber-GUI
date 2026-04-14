@@ -714,7 +714,12 @@ class MainWindow(QMainWindow):
         self._image_subs_panel = ImageSubsPanel()
         self._tabs.addTab(self._image_subs_panel, STRINGS["tab_image_subs"])
 
-        # Tab 6: Regex profile editor
+        # Tab 6: Transcribe (Whisper audio transcription)
+        from .transcribe_panel import TranscribePanel
+        self._transcribe_panel = TranscribePanel()
+        self._tabs.addTab(self._transcribe_panel, STRINGS["tab_transcribe"])
+
+        # Tab 7: Regex profile editor
         from .regex_editor import RegexEditorPanel
         self._regex_editor = RegexEditorPanel()
         self._tabs.addTab(self._regex_editor, STRINGS["tab_regex_editor"])

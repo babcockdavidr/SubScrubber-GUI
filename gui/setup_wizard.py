@@ -189,6 +189,8 @@ class SetupWizard(QDialog):
         has_ffmpeg  = ffmpeg_available()
         has_mkv     = mkvmerge_available()
         has_tess    = tesseract_available()
+        from core.whisper import faster_whisper_available
+        has_whisper = faster_whisper_available()
 
         ffmpeg_ok = has_ffprobe and has_ffmpeg
         if ffmpeg_ok:
@@ -227,6 +229,13 @@ class SetupWizard(QDialog):
             found  = has_tess,
             detail = tess_detail,
             url    = "https://github.com/UB-Mannheim/tesseract/wiki",
+        ))
+
+        layout.addWidget(_ToolRow(
+            name   = "faster-whisper",
+            found  = has_whisper,
+            detail = STRINGS["wizard_whisper_ok"] if has_whisper else STRINGS["wizard_whisper_missing"],
+            url    = "https://github.com/SYSTRAN/faster-whisper",
         ))
 
         # ── Footer ────────────────────────────────────────────────────────
