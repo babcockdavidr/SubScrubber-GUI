@@ -58,6 +58,8 @@ a = Analysis(
         # requires faster-whisper to be installed separately via pip.
         # core.whisper is included so the availability check works correctly.
         "core.whisper",
+        # core.logger — imported lazily at error sites; ensure it's bundled
+        "core.logger",
     ],
     hookspath=[],
     hooksconfig={},
@@ -101,8 +103,8 @@ app = BUNDLE(
     name="SubForge.app",
     bundle_identifier="com.babcockdavidr.subforge",
     info_plist={
-        "CFBundleShortVersionString": "0.11.0",
-        "CFBundleVersion":            "0.11.0",
+        "CFBundleShortVersionString": "0.12.0",
+        "CFBundleVersion":            "0.12.0",
         "NSHighResolutionCapable":    True,
         "LSMinimumSystemVersion":     "10.15",
     },

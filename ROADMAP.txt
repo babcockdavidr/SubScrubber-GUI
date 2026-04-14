@@ -1,9 +1,28 @@
 SubForge — Development Roadmap
-Last updated: v0.11.0 (complete) — next: v0.12.0
+Last updated: v0.12.0 (complete) — next: v1.0.0
 ================================================================================
 
 COMPLETED
 --------------------------------------------------------------------------------
+v0.12.0 — Transcribe Inline Editing + Diagnostics ✓ COMPLETE
+  - Transcribe tab inline editing: after transcription, all subtitle blocks
+    are shown in an editable QTableWidget (index, timestamp, text per row)
+  - Click any text cell to edit; edits sync back to block.content immediately
+  - Save as .srt and Remux use the edited output — transcription errors can
+    be corrected before saving or remuxing
+  - QStackedWidget: browser page (idle/progress/error) swaps to table page
+    on success; resets on Clear or new transcription
+  - core/logger.py: centralised error logging — append_error(), read_log(),
+    clear_log(), get_log_path(); appends entries instead of overwriting;
+    each entry has UTC timestamp, source tab, and full traceback
+  - Log path follows core/paths.USER_DIR — %APPDATA%\SubForge\subforge_errors.log
+    on Windows (frozen or source), ~/SubForge/subforge_errors.log elsewhere
+  - All error catch sites in app.py and regex_editor.py now call append_error()
+    instead of writing directly — errors accumulate across a session
+  - Settings > About tab: "View Error Log" button opens a read-only dialog
+    showing log contents with path label; "Clear Log" button to reset
+  - All 14 language packs updated for all new strings
+
 v0.11.0 — Whisper Audio Transcription ✓ COMPLETE
   - Transcribe tab: dedicated tab for generating subtitles from video audio
     using faster-whisper AI, running fully offline with no API keys required
@@ -29,31 +48,11 @@ v0.11.0 — Whisper Audio Transcription ✓ COMPLETE
 PLANNED
 --------------------------------------------------------------------------------
 
-v0.12.0 — Transcribe Tab: Inline Editing
-  - Step 1: After transcription completes, show each subtitle line in the
-    Transcribe tab in the same block-list format as the Single File tab —
-    index, timestamp, and text visible per line.
-  - Step 2: User can click any line to edit the text inline within the tab.
-    Edits are held in memory and reflected in the subtitle data structure.
-  - Step 3: Save as .srt and Remux into video both use the edited output,
-    not the raw Whisper output. This allows correcting transcription errors
-    before saving or remuxing.
-
-v0.13.0 — Diagnostics & Polish
-  - Error log viewer: button in Settings (About tab or dedicated Diagnostics
-    tab) that opens the crash log if it exists, or shows "No errors logged
-    yet" if it doesn't. Log path: %APPDATA%\SubForge\subforge_crash.log
-    when running from the installer, or <repo_root>/subforge_crash.log
-    when running from source.
-  - Unified error logging: roll errors from all tabs (Single File, Batch,
-    Video Scan, Image Subs, Transcribe) into the same log file, not just
-    unhandled launch exceptions. Each entry should include a timestamp,
-    the tab/module of origin, and the full traceback.
-  - Log storage consistency: source-mode writes log to repo root (already
-    writable, no AppData dependency); installer mode writes to
-    %APPDATA%\SubForge\ (already correct for Whisper crash log).
-
 v1.0.0 — Accessibility, Polish & Release
+  - Multi-thread support for faster scanning — all tabs (Batch, Video Scan,
+    Image Subs) should process files/tracks in parallel using
+    concurrent.futures.ThreadPoolExecutor. Default thread count = CPU count,
+    capped at 4. Progress reporting preserved via existing signal/slot pattern.
   - Uninstaller cleans up %APPDATA%\SubForge\ — this directory now holds
     Whisper models (potentially several GB) and the crash log. The uninstaller
     should prompt the user and offer to delete it, rather than leaving it

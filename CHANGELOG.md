@@ -1,5 +1,15 @@
 # SubForge — Release Notes
 
+## v0.12.0 — Inline Editing & Diagnostics
+
+- **Transcribe tab: inline editing** — after transcription completes, all subtitle blocks are displayed in a full editable table (index, timestamp, text). Click any text cell to correct it. Edits sync immediately to the subtitle data — Save as .srt and Remux both use the corrected output, not the raw Whisper result.
+- **Error log viewer** — "View Error Log" button in Settings > About opens a scrollable dialog showing every error SubForge has logged. Each entry includes the originating tab, a UTC timestamp, and the full traceback. A "Clear Log" button lets you reset it.
+- **Unified error logging** — all error catch sites across the app now append to a single persistent log (`subforge_errors.log`) instead of overwriting it. Multiple errors in a session accumulate rather than replacing each other.
+- **Log path** — installer mode: `%APPDATA%\SubForge\subforge_errors.log`. Source mode: `<repo_root>/subforge_errors.log`. Same path logic as all other SubForge user data.
+- **14 language packs updated** — all new strings for both features are fully translated.
+
+---
+
 ## v0.11.0 — Whisper Audio Transcription
 
 - **Transcribe tab** — generate subtitles directly from a video's audio track using Whisper AI. Runs fully offline — no API keys, no cloud, no internet required after the model is downloaded.

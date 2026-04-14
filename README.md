@@ -1,4 +1,4 @@
-# SubForge — v0.11.0: Whisper Audio Transcription
+# SubForge — v0.12.0: Inline Editing & Diagnostics
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,16 +10,11 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.11.0 — Whisper Audio Transcription
-- **Transcribe tab** — a dedicated tab for generating subtitle files directly from a video's audio track using faster-whisper AI. Runs fully offline on your own machine — no cloud, no API keys, no internet required after model download.
-- **Model selection** — choose from tiny, base, small, medium, or large Whisper models. Plain-language speed vs. accuracy descriptions are shown for each. Models you've already downloaded are marked with ✓.
-- **Language selection** — auto-detect the spoken language, or manually specify any of 19 supported languages from the dropdown.
-- **SDH mode** — when enabled, non-speech audio annotations such as `[Music]`, `[Laughs]`, and `[Applause]` are included in the transcription output. When disabled, they are stripped.
-- **Save as .srt** — write the transcribed output as a standalone `.srt` file next to the video, following the same `[stem].[lang].srt` naming convention as Video Scan.
-- **Remux into video** — add the transcribed subtitle track to an MKV (via mkvmerge) or MP4 (via ffmpeg) file alongside all existing tracks.
-- **Settings > Paths** — a new Whisper model directory entry lets you control where downloaded models are stored. Leave blank to use the default SubForge data directory.
-- **GPU acceleration** — SubForge automatically uses CUDA float16 if a compatible NVIDIA GPU and torch are available, falling back to CPU int8 otherwise.
-- **14 language packs updated** — all new Transcribe tab strings are fully translated across all 14 supported interface languages.
+### v0.12.0 — Inline Editing & Diagnostics
+- **Transcribe tab: inline editing** — after transcription completes, all subtitle blocks are displayed in an editable table showing index, timestamp, and text. Click any text cell to correct it directly. Edits are applied immediately — Save as .srt and Remux both use your corrected output.
+- **Error log viewer** — a new "View Error Log" button in Settings > About opens a scrollable log of any errors SubForge has encountered. Includes the originating tab, a UTC timestamp, and the full traceback for each entry. A "Clear Log" button resets it.
+- **Unified error logging** — errors from all parts of the app now append to a single persistent log file instead of overwriting it. The log lives in `%APPDATA%\SubForge\subforge_errors.log` (installer) or the repo root (source).
+- **14 language packs updated** — all new strings across both features are fully translated.
 
 ---
 
@@ -98,6 +93,56 @@ The main window has six tabs: **Single File**, **Batch**, **Video Scan**, **Imag
 
 ---
 
+## Settings
+
+Click **⚙ Settings** in the toolbar to open the Settings dialog. It has four tabs: **General**, **Cleaning Options**, **Paths**, and **About**. Settings are saved automatically to `settings.json` in SubForge's data directory.
+
+### General
+
+![Settings, General](images/Settings_Screenshot.png)
+
+- **Default sensitivity** — sets the starting sensitivity level (1–5) applied to all tabs when SubForge launches. Drag the slider toward Aggressive to catch more blocks, or toward Conservative to reduce false positives. This is the same slider available in Single File, Batch, and Video Scan — changing it here sets what value those sliders start at on next launch.
+- **Language** — changes the interface language. SubForge supports 14 languages: English, Spanish, Dutch, Hebrew, Indonesian, Portuguese, Swedish, French, Arabic, Chinese, Hindi, Russian, Turkish, and Polish. A restart is required to apply the change; SubForge will offer to restart automatically.
+
+### Cleaning Options
+
+Cleaning options apply globally across Single File, Batch, and Video Scan at the time a file is saved or remuxed. They do not affect detection — only what gets written to disk.
+
+![Settings, Cleaning Options](images/Settings_Screenshot2.png)
+
+**Content removal:**
+- **Remove music cues** — strips lines that consist entirely of music notation (e.g. `♪ instrumental ♪`)
+- **Remove SDH annotations** — removes sound effect descriptions and non-speech cues (e.g. `[LAUGHS]`, `[door slams]`). Carries an accessibility warning — disabled by default
+- **Remove speaker labels** — strips leading speaker identifiers (e.g. `JOHN:`, `NARRATOR:`)
+
+**Formatting:**
+- **Strip formatting tags** — removes HTML-style tags such as `<i>`, `<b>`, and `<font color=...>`. When enabled, two sub-options let you preserve `<i>` (italic) and `<b>` (bold) tags individually
+- **Remove content between brackets** — five independent options for removing everything inside `{curly}`, `[square]`, `(parentheses)`, `*asterisks*`, or `#hashes#`
+
+**Other:**
+- **Normalize case** — converts all-caps lines to title case
+- **Merge duplicate cues** — collapses back-to-back blocks with identical text into a single block
+
+### Paths
+
+Configure where SubForge looks for external tools. Each entry has a Browse button and a live status indicator showing whether the tool was found. Leave any field blank to rely on system PATH.
+
+- **FFmpeg** — required for Video Scan, MP4 remux, and the Transcribe tab
+- **ffprobe** — required for Video Scan and Image Subs track detection
+- **mkvmerge** — required for MKV remux across all tabs
+- **Tesseract** — required for the Image Subs tab
+- **Whisper model directory** — where downloaded Whisper models are cached. Leave blank to use the default location inside SubForge's data folder
+
+### About
+
+Shows the current version, author, and links to the GitHub repository and issue tracker. Three buttons:
+
+- **What's New** — opens the release notes dialog showing the full changelog
+- **View Error Log** — opens a scrollable log of any errors SubForge has encountered, with the log file path shown at the top. Each entry includes the originating tab, a UTC timestamp, and the full traceback. A **Clear Log** button resets the file
+- **Report an Issue** — opens the GitHub issue tracker in your browser
+
+---
+
 ## Single File Tab
 
 For loading, inspecting, and cleaning individual subtitle files.
@@ -162,7 +207,7 @@ For cleaning an entire media library in one pass, including libraries where each
 
 For scanning embedded subtitle tracks inside video files without extracting them first.
 
-![Video Scan Tab](images/Video_Scan_Screenshot.png)
+![Video Scan Tab](images/Video_Screenshot.png)
 
 **Workflow:**
 1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
@@ -371,17 +416,11 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v0.12.0 — Transcribe Tab: Inline Editing**
-Edit transcription results directly in the Transcribe tab before saving or remuxing — click any subtitle line to correct it, then output uses your edits.
-
-**v0.13.0 — Diagnostics & Polish**
-Error log viewer in Settings. Unified error logging across all tabs. Consistent log storage between source and installer modes.
-
 **v1.0.0 — Accessibility & Release**
-Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass.
+Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Multi-thread scanning across Batch, Video Scan, and Image Subs. Full cross-platform test pass. Windows uninstaller cleanup of AppData.
 
 The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.11.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.12.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
