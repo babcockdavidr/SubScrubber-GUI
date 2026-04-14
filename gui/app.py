@@ -804,6 +804,7 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self):
         import traceback
+        from core.logger import append_error
         try:
             dlg = SettingsDialog(self)
             if dlg.exec():
@@ -813,7 +814,7 @@ class MainWindow(QMainWindow):
                 self._video_panel._slider.setValue(v)
         except Exception:
             err = traceback.format_exc()
-            _get_crash_log_path().write_text(err, encoding="utf-8")
+            append_error("Settings", err)
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Error", f"Settings crashed:\n\n{err}")
 
@@ -1275,22 +1276,9 @@ class MainWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-def _get_crash_log_path():
-    """Return a writable path for crash logs."""
-    import os
-    # Use AppData on Windows, home dir elsewhere — always writable
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home()
-    log_dir = base / "SubForge"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir / "subforge_crash.log"
-
-
 def launch_gui(preload: List[Path] = None):
     import traceback
-    _log = _get_crash_log_path()
+    from core.logger import append_error
 
     try:
         app = QApplication.instance() or QApplication(sys.argv)
@@ -1302,7 +1290,7 @@ def launch_gui(preload: List[Path] = None):
             wizard.exec()
         sys.exit(app.exec())
     except Exception:
-        _log.write_text(traceback.format_exc(), encoding="utf-8")
+        append_error("launch", traceback.format_exc())
         raise
 
 

@@ -694,14 +694,10 @@ class RegexEditorPanel(QWidget):
                     self._profile_list.setCurrentRow(i)
                     break
         except Exception:
-            import os, sys, traceback
+            import traceback
+            from core.logger import append_error
             err = traceback.format_exc()
-            if sys.platform == "win32":
-                log_dir = Path(os.environ.get("APPDATA", Path.home())) / "SubForge"
-            else:
-                log_dir = Path.home() / "SubForge"
-            log_dir.mkdir(parents=True, exist_ok=True)
-            (log_dir / "subforge_crash.log").write_text(err, encoding="utf-8")
+            append_error("Regex Editor", err)
             QMessageBox.critical(self, "Error", f"New profile crashed:\n\n{err}")
 
     # ── Reload ────────────────────────────────────────────────────────────

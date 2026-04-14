@@ -23,11 +23,12 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextBrowser, QProgressBar, QFileDialog, QFrame, QSplitter,
-    QComboBox, QCheckBox,
+    QComboBox, QCheckBox, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView,
 )
 
 from core.ffprobe import VIDEO_EXTENSIONS
@@ -122,38 +123,6 @@ def _transcribing_html(status: str) -> str:
     )
 
 
-def _result_html(subtitle, language: str = "", model: str = "") -> str:
-    """Render a simple summary of the transcription output — no ad detection."""
-    parts = [HTML_STYLE, '<div class="section">Transcription Results</div>']
-
-    def row(lbl, val):
-        parts.append(
-            f'<div class="meta-row"><span class="meta-lbl">{lbl}&nbsp;</span>'
-            f'<span class="meta-val">{_esc(val)}</span></div>'
-        )
-
-    if language:
-        row("Language:", language)
-    if model:
-        row("Model:", model)
-    row("Subtitle blocks:", str(len(subtitle.blocks)))
-
-    if subtitle.blocks:
-        parts.append('<div class="section">Preview</div>')
-        for b in subtitle.blocks[:10]:
-            parts.append(
-                f'<div class="meta-row">'
-                f'<span class="ts">[{_esc(b.start)}]</span>&nbsp;'
-                f'<span style="color:{FG}">{_esc(b.text[:100])}</span>'
-                f'</div>'
-            )
-        if len(subtitle.blocks) > 10:
-            remaining = len(subtitle.blocks) - 10
-            parts.append(
-                f'<div class="note">… and {remaining} more block(s). Save as .srt to view the full transcript.</div>'
-            )
-
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -419,20 +388,75 @@ class TranscribePanel(QWidget):
         action_bar.addWidget(self._btn_remux)
         ll.addLayout(action_bar)
 
-        # Right: HTML detail pane
+        # Right: stacked pane — page 0: HTML browser (idle/progress/error)
+        #                        page 1: editable table (results)
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(4)
         lbl_detail = QLabel(STRINGS["tr_lbl_results"])
         lbl_detail.setObjectName("section_label")
+
+        self._detail_stack = QStackedWidget()
+
+        # Page 0 — HTML browser (unchanged states)
         self._detail = QTextBrowser()
         self._detail.setOpenLinks(False)
         self._detail.setStyleSheet(
             f"background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;"
         )
         self._detail.setHtml(_welcome_html())
+        self._detail_stack.addWidget(self._detail)   # index 0
+
+        # Page 1 — editable block table
+        self._edit_table = QTableWidget()
+        self._edit_table.setColumnCount(3)
+        self._edit_table.setHorizontalHeaderLabels([
+            STRINGS["tr_col_index"],
+            STRINGS["tr_col_timestamp"],
+            STRINGS["tr_col_text"],
+        ])
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch)
+        self._edit_table.setColumnWidth(0, 42)
+        self._edit_table.setColumnWidth(1, 210)
+        self._edit_table.verticalHeader().setVisible(False)
+        self._edit_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self._edit_table.setAlternatingRowColors(True)
+        self._edit_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked |
+            QAbstractItemView.EditTrigger.SelectedClicked |
+            QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self._edit_table.setStyleSheet(
+            f"QTableWidget {{ background: {BG2}; color: {FG}; "
+            f"gridline-color: {BORDER}; "
+            f"border: 1px solid {BORDER}; border-radius: 4px; }}"
+            f"QTableWidget::item {{ padding: 3px 6px; }}"
+            f"QTableWidget::item:selected {{ background: {BG3}; color: {FG}; }}"
+            f"QTableWidget::item:alternate {{ background: {BG}; }}"
+            f"QHeaderView::section {{ background: {BG3}; color: {FG2}; "
+            f"border: none; border-bottom: 1px solid {BORDER}; "
+            f"padding: 4px 6px; }}"
+        )
+        self._edit_table.itemChanged.connect(self._on_cell_edited)
+        self._detail_stack.addWidget(self._edit_table)   # index 1
+
+        # Hint label below the table — visible only when table is shown
+        self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
+        self._lbl_edit_hint.setStyleSheet(
+            f"color: {FG2}; font-size: 9pt; font-style: italic;")
+        self._lbl_edit_hint.setWordWrap(True)
+        self._lbl_edit_hint.setVisible(False)
+
         rl.addWidget(lbl_detail)
-        rl.addWidget(self._detail, stretch=1)
+        rl.addWidget(self._detail_stack, stretch=1)
+        rl.addWidget(self._lbl_edit_hint)
 
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -496,6 +520,9 @@ class TranscribePanel(QWidget):
         self._progress.setVisible(False)
         self._lbl_status.setText(STRINGS["tr_status_load"])
         self._detail.setHtml(_welcome_html())
+        self._detail_stack.setCurrentIndex(0)
+        self._edit_table.setRowCount(0)
+        self._lbl_edit_hint.setVisible(False)
         self._drop_zone.setVisible(False)
 
     def _clear(self):
@@ -511,6 +538,9 @@ class TranscribePanel(QWidget):
         self._progress.setVisible(False)
         self._lbl_status.setText(STRINGS["tr_status_load"])
         self._detail.setHtml(_welcome_html())
+        self._detail_stack.setCurrentIndex(0)
+        self._edit_table.setRowCount(0)
+        self._lbl_edit_hint.setVisible(False)
         self._drop_zone.setVisible(True)
 
     # ── Transcription ─────────────────────────────────────────────────────
@@ -528,6 +558,10 @@ class TranscribePanel(QWidget):
         self._progress.setRange(0, 0)
         self._progress.setVisible(True)
         self._lbl_status.setText(STRINGS["tr_status_transcribing"])
+        # Reset to browser page while transcription is in progress
+        self._edit_table.setRowCount(0)
+        self._lbl_edit_hint.setVisible(False)
+        self._detail_stack.setCurrentIndex(0)
         self._detail.setHtml(_transcribing_html(STRINGS["tr_status_transcribing"]))
 
         self._worker = TranscribeWorker(
@@ -588,17 +622,61 @@ class TranscribePanel(QWidget):
             )
         )
 
-        self._detail.setHtml(_result_html(
-            self._subtitle,
-            language=result.language or "",
-            model=result.model or "",
-        ))
+        self._populate_edit_table()
         self._btn_save_srt.setEnabled(True)
         self._btn_remux.setEnabled(
             self._video_path is not None
             and self._video_path.suffix.lower() in (".mkv", ".mp4", ".m4v")
         )
         self._populate_model_combo()
+
+    def _populate_edit_table(self):
+        """Fill the edit table from self._subtitle.blocks and switch to page 1."""
+        import re as _re
+        blocks = self._subtitle.blocks if self._subtitle else []
+        self._edit_table.blockSignals(True)
+        self._edit_table.setRowCount(len(blocks))
+        for row, block in enumerate(blocks):
+            # Column 0 — index (read-only)
+            idx_item = QTableWidgetItem(str(block.original_index))
+            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            idx_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            idx_item.setForeground(QColor(FG2))
+            self._edit_table.setItem(row, 0, idx_item)
+
+            # Column 1 — timestamp (read-only)
+            ts = f"{block.start} → {block.end}"
+            ts_item = QTableWidgetItem(ts)
+            ts_item.setFlags(ts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            ts_item.setForeground(QColor("#7dcfff"))
+            self._edit_table.setItem(row, 1, ts_item)
+
+            # Column 2 — text (editable)
+            txt_item = QTableWidgetItem(block.content)
+            self._edit_table.setItem(row, 2, txt_item)
+
+        self._edit_table.resizeRowsToContents()
+        self._edit_table.blockSignals(False)
+        self._detail_stack.setCurrentIndex(1)
+        self._lbl_edit_hint.setVisible(True)
+
+    # ── Inline edit sync ─────────────────────────────────────────────────
+
+    def _on_cell_edited(self, item: QTableWidgetItem):
+        """Sync an edited text cell back to the subtitle data model."""
+        if item.column() != 2:
+            return
+        if not self._subtitle:
+            return
+        row = item.row()
+        if row < 0 or row >= len(self._subtitle.blocks):
+            return
+        import re as _re
+        block = self._subtitle.blocks[row]
+        new_text = item.text()
+        block.content = new_text
+        block.clean_content = _re.sub(r"[\s.,:_-]", "", new_text)
 
     def _build_subtitle(self, result: TranscribeResult):
         """Assemble a ParsedSubtitle from TranscribeResult via a synthetic SRT."""

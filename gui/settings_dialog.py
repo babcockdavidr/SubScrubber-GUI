@@ -507,8 +507,15 @@ class SettingsDialog(QDialog):
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
         btn_whats_new.clicked.connect(self._show_changelog)
+        btn_log = QPushButton(STRINGS["settings_btn_view_log"])
+        btn_log.setStyleSheet(
+            f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
+            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
+        )
+        btn_log.clicked.connect(self._show_error_log)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
+        btn_row.addWidget(btn_log)
         btn_row.addWidget(btn_whats_new)
         btn_row.addWidget(btn_issue)
         outer.addLayout(btn_row)
@@ -520,6 +527,67 @@ class SettingsDialog(QDialog):
     def _show_changelog(self):
         from gui.changelog_dialog import ChangelogDialog
         dlg = ChangelogDialog(self)
+        dlg.exec()
+
+    def _show_error_log(self):
+        from core.logger import read_log, clear_log, get_log_path
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QLabel
+        )
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(STRINGS["settings_log_title"])
+        dlg.resize(700, 480)
+        dlg.setStyleSheet(f"background: {BG}; color: {FG};")
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        # Path label
+        lbl_path = QLabel(str(get_log_path()))
+        lbl_path.setStyleSheet(f"color: {FG2}; font-size: 9pt; font-family: Consolas, monospace;")
+        lbl_path.setWordWrap(True)
+        layout.addWidget(lbl_path)
+
+        # Log content
+        log_text = read_log()
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
+            f"border-radius: 4px; font-family: Consolas, monospace; font-size: 9pt;"
+        )
+        txt.setPlainText(log_text if log_text else STRINGS["settings_log_empty"])
+        layout.addWidget(txt, stretch=1)
+
+        # Button row
+        btn_row = QHBoxLayout()
+        btn_clear = QPushButton(STRINGS["settings_log_clear"])
+        btn_clear.setStyleSheet(
+            f"padding: 6px 16px; color: {FG2}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; background: {BG2};"
+        )
+        btn_close = QPushButton(STRINGS["settings_btn_cancel"])
+        btn_close.setStyleSheet(
+            f"padding: 6px 16px; color: {FG2}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; background: {BG2};"
+        )
+
+        def _clear():
+            clear_log()
+            txt.setPlainText(STRINGS["settings_log_empty"])
+            btn_clear.setEnabled(False)
+
+        btn_clear.clicked.connect(_clear)
+        btn_clear.setEnabled(bool(log_text))
+        btn_close.clicked.connect(dlg.accept)
+
+        btn_row.addStretch()
+        btn_row.addWidget(btn_clear)
+        btn_row.addWidget(btn_close)
+        layout.addLayout(btn_row)
+
         dlg.exec()
 
     def _build_paths_tab(self):
