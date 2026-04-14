@@ -90,12 +90,29 @@ def clear_model_dir() -> None:
 # ---------------------------------------------------------------------------
 
 def faster_whisper_available() -> bool:
-    """Return True if faster-whisper is importable."""
+    """Return True if faster-whisper is importable and its dependencies load cleanly.
+
+    When SubForge runs as a windowed app (double-click / PyInstaller), sys.stderr
+    is None because there is no console. faster_whisper pulls in ctranslate2 →
+    transformers, which does `sys.stderr.flush` at module level and crashes with
+    AttributeError. We temporarily substitute a no-op stream so the import can
+    proceed, then restore the original value regardless of outcome.
+    """
+    import io
+    _saved_stderr = _sys.stderr
+    _saved_stdout = _sys.stdout
     try:
+        if _sys.stderr is None:
+            _sys.stderr = io.StringIO()
+        if _sys.stdout is None:
+            _sys.stdout = io.StringIO()
         import faster_whisper  # noqa: F401
         return True
-    except ImportError:
+    except Exception:
         return False
+    finally:
+        _sys.stderr = _saved_stderr
+        _sys.stdout = _saved_stdout
 
 
 # ---------------------------------------------------------------------------

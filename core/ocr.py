@@ -730,7 +730,7 @@ def _build_subtitle(
     lang_tag = f".{lang}" if lang and lang != "und" else ""
     tmp_name = f"ocr_track{track_index}{lang_tag}{ext}"
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tmp_path = Path(tmpdir) / tmp_name
         tmp_path.write_text(srt_text, encoding="utf-8")
         try:
@@ -859,7 +859,7 @@ def _ocr_track_pgs(
     pytesseract.pytesseract.tesseract_cmd = tess_path
     tess_lang = _iso_to_tesseract_lang(track.language)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         sup_path = Path(tmpdir) / "track.sup"
 
         if progress_cb:
@@ -921,7 +921,7 @@ def _ocr_track_vobsub(
     """VOBSUB path: ffmpeg 1fps overlay, dedup, then OCR."""
     from .cleaner import analyze
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tmp_path = Path(tmpdir)
 
         frames, err = extract_subtitle_frames(
@@ -986,7 +986,7 @@ def _finish_ocr(track, srt_lines: List[str], progress_cb) -> None:
     lang_tag = f".{lang}" if lang else ""
     tmp_name = f"ocr_track{track.track_num}{lang_tag}.srt"
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tmp_path = Path(tmpdir) / tmp_name
         tmp_path.write_text(srt_text, encoding="utf-8")
         try:
