@@ -52,6 +52,12 @@ a = Analysis(
         # GUI lazy imports
         "gui.changelog_dialog",
         "gui.image_subs_panel",
+        "gui.transcribe_panel",
+        # core.whisper — imported inside functions
+        # Note: faster-whisper itself is NOT bundled. The Transcribe tab
+        # requires faster-whisper to be installed separately via pip.
+        # core.whisper is included so the availability check works correctly.
+        "core.whisper",
     ],
     hookspath=[],
     hooksconfig={},
@@ -95,8 +101,8 @@ app = BUNDLE(
     name="SubForge.app",
     bundle_identifier="com.babcockdavidr.subforge",
     info_plist={
-        "CFBundleShortVersionString": "0.10.0",
-        "CFBundleVersion":            "0.10.0",
+        "CFBundleShortVersionString": "0.11.0",
+        "CFBundleVersion":            "0.11.0",
         "NSHighResolutionCapable":    True,
         "LSMinimumSystemVersion":     "10.15",
     },

@@ -1,5 +1,5 @@
 SubForge — Development Roadmap
-Last updated: v0.10.0 (complete) — next: v0.11.0
+Last updated: v0.11.0 (complete) — next: v1.0.0
 ================================================================================
 
 COMPLETED
@@ -109,27 +109,42 @@ v0.10.0 — OCR for Image-Based Subtitles ✓ COMPLETE
   - pytesseract and Pillow bundled in Windows installer via PyInstaller
   - Experimental warning banner on Image Subs tab
 
+v0.11.0 — Whisper Audio Transcription ✓ COMPLETE
+  - Transcribe tab: dedicated tab for generating subtitles from video audio
+    using faster-whisper AI, running fully offline with no API keys required
+  - Model selection: tiny / base / small / medium / large with plain-language
+    speed vs. accuracy descriptions; downloaded models marked with ✓
+  - Language selection: auto-detect or manual ISO language code
+  - SDH mode: include sound descriptions and non-speech annotations;
+    on by default with an accessibility warning when disabled
+  - Save as .srt: write transcribed output as [stem].[lang].srt next to video
+  - Remux into video: add transcribed track to MKV (mkvmerge) or MP4 (ffmpeg)
+    alongside existing tracks
+  - Settings > Paths: Whisper model directory entry (browse for folder;
+    blank = default location in SubForge data dir)
+  - CUDA GPU acceleration when torch + CUDA available; falls back to CPU int8
+  - core/whisper.py: path/model management, transcription pipeline, SDH
+    segment detection, SRT assembly — all independent of GUI
+
+  KNOWN ISSUES — must fix before tagging v0.11.0 release:
+  - Whisper crash resolved — moved transcription to isolated subprocess so
+    CTranslate2 native libraries can't conflict with Qt's thread runtime.
+  - All 13 non-EN language packs now have full translations for all 53 new
+    v0.11.0 strings. Translation quality for HE, AR, ZH, HI, ID should be
+    reviewed by native speakers before the 1.0.0 release.
+
 PLANNED
 --------------------------------------------------------------------------------
 
-v0.11.0 — Whisper Audio Transcription
-  - Whisper AI integration for local, offline subtitle generation from audio
-      - Runs entirely on-device — no cloud, no API keys, no internet required
-        consistent with SubForge's fully local philosophy
-      - User selects a video file; Whisper transcribes audio to subtitle blocks;
-        SubForge's cleaning engine runs on the output
-      - SDH mode: generate with sound descriptions and speaker labels for
-        deaf and hard of hearing viewers
-      - Export as .srt/.ass or remux back into the video
-      - Makes SubForge the only tool that both generates AND cleans subtitles
-        in a single local application
-  - Model selection (tiny/base/small/medium/large) with speed vs accuracy
-    tradeoff explained in plain language
-  - Language detection or manual language selection for transcription
-  - New "Transcribe" tab (or integrated into Video Scan — TBD at design time)
-  - Whisper binary/model path in Settings > Paths
-  - faster-whisper or openai-whisper as backend (TBD — faster-whisper preferred
-    for Windows compatibility and CUDA support)
+v0.12.0 — Transcribe Tab: Inline Editing
+  - Step 1: After transcription completes, show each subtitle line in the
+    Transcribe tab in the same block-list format as the Single File tab —
+    index, timestamp, and text visible per line.
+  - Step 2: User can click any line to edit the text inline within the tab.
+    Edits are held in memory and reflected in the subtitle data structure.
+  - Step 3: Save as .srt and Remux into video both use the edited output,
+    not the raw Whisper output. This allows correcting transcription errors
+    before saving or remuxing.
 
 v1.0.0 — Accessibility, Polish & Release
   - Light theme and high contrast theme (toggle in Settings)

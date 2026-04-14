@@ -4,3 +4,6 @@ pysubs2>=1.6.0
 # Optional — required for Image Subs tab (OCR of PGS/VOBSUB subtitle tracks)
 pytesseract>=0.3.10
 Pillow>=10.0.0
+
+# Optional — required for Transcribe tab (AI audio transcription)
+faster-whisper>=1.0.0

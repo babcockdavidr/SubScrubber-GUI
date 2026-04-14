@@ -1,5 +1,19 @@
 # SubForge — Release Notes
 
+## v0.11.0 — Whisper Audio Transcription
+
+- **Transcribe tab** — generate subtitles directly from a video's audio track using Whisper AI. Runs fully offline — no API keys, no cloud, no internet required after the model is downloaded.
+- **Model selection** — choose from tiny, base, small, medium, or large. Each model is described in plain language with its speed vs. accuracy tradeoff. Downloaded models are marked with ✓.
+- **Language selection** — auto-detect or manually specify an ISO language code for more reliable results on known-language content.
+- **SDH mode** — on by default. Includes sound descriptions and non-speech annotations for deaf and hard of hearing viewers. Disabling it shows an accessibility warning.
+- **Ad-detection on transcription output** — the same engine used on subtitle files and OCR output runs on the Whisper result. Flagged blocks are shown in the detail pane.
+- **Save as .srt** — saves the transcribed subtitle as `[stem].[lang].srt` next to the video file.
+- **Remux into video** — adds the transcribed subtitle as a new track in MKV (via mkvmerge) or MP4 (via ffmpeg) alongside existing tracks.
+- **Settings > Paths: Whisper model directory** — optionally redirect where models are cached. Leave blank to use the default location inside SubForge's data folder.
+- **GPU acceleration** — automatically uses CUDA float16 when a compatible GPU and torch are available; falls back to CPU int8 silently.
+
+---
+
 ## v0.10.0 — Image Subs
 
 - **Image Subs tab** — scan PGS (Blu-ray) and VOBSUB (DVD) image-based subtitle tracks using Tesseract OCR. The same ad-detection engine used on text tracks runs on the OCR output.

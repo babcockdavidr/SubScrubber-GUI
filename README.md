@@ -1,41 +1,41 @@
-# SubForge — v0.10.0: Image Subtitles (VOBSUB/PGS) Update 
+# SubForge — v0.11.0: Whisper Audio Transcription
 
-**Remove ads, watermarks, and distributor junk from subtitle files.**
+**Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
-SubForge is the ultimate, cross-platform, GUI-enabled, multi-format subtitle cleaning tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` `.mp4` and more
+SubForge is the ultimate cross-platform, GUI-enabled, multi-format subtitle cleaning and creation tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` · `.mp4` · and more — including PGS and VOBSUB image-based tracks via OCR, and audio transcription via Whisper AI.
 
-Based on the detection engine from [KBlixt/subcleaner](https://github.com/KBlixt/subcleaner), extended with multi-format support, a full GUI, batch processing, embedded subtitle scanning, MKVToolNix integration, MP4 remuxing, and an in-app regex profile editor.
+SubForge's ad-detection engine is built on a regex-based scoring system, incorporating elements from the original detection logic in [KBlixt/subcleaner](https://github.com/KBlixt/subcleaner), and extended far beyond it: a full GUI, multi-format support, batch processing, embedded subtitle scanning, image track OCR, MKVToolNix and ffmpeg integration, AI audio transcription, and an in-app regex profile editor.
 
 ---
 
 ## What's New
 
-### v0.10.0 — Image Subs
-- **Image Subs tab** — a dedicated tab for scanning PGS (Blu-ray) and VOBSUB (DVD) image-based subtitle tracks using Tesseract OCR. The same ad-detection engine used on text tracks runs on the OCR output, closing the last remaining gap in video subtitle coverage.
-- **Tesseract OCR integration** — SubForge extracts one bitmap per subtitle event, runs Tesseract on each frame, assembles the result into a proper subtitle, and feeds it through the detection engine unchanged.
-- **Save as .srt** — OCR'd subtitles can be saved as standalone `.srt` files next to the video, following the same `[stem].[lang].srt` naming convention as Video Scan.
-- **Remux into video** — OCR'd text tracks can be remuxed back into MKV or MP4 files, either replacing the original image track or kept alongside it on MKV (user's choice via checkbox).
-- **Sensitivity slider** — Image Subs has its own sensitivity slider that auto-refreshes the detail pane, respecting your default from Settings.
-- **Open in Image Subs** — Video Scan now shows an "Open in Image Subs →" button in the detail pane whenever a video has image tracks, handing the file off directly.
-- **Settings > Paths expanded** — ffmpeg, ffprobe, and Tesseract now each have their own path entry in Settings > Paths. All four tools show live found/not-found status.
-- **First-run wizard updated** — Tesseract now appears alongside FFmpeg and MKVToolNix, with a language selector right in the wizard that restarts the app to apply immediately.
-- **What's New in Settings** — a new button in Settings > About opens a scrollable release notes dialog reading from the bundled `CHANGELOG.md`.
-- **System language auto-detection** — on first launch, SubForge detects the OS locale and automatically selects the matching language pack, falling back to English.
-- **Translation fixes** — Settings Save/Cancel buttons and all five sensitivity slider labels are now fully translated across all 14 language packs.
+### v0.11.0 — Whisper Audio Transcription
+- **Transcribe tab** — a dedicated tab for generating subtitle files directly from a video's audio track using faster-whisper AI. Runs fully offline on your own machine — no cloud, no API keys, no internet required after model download.
+- **Model selection** — choose from tiny, base, small, medium, or large Whisper models. Plain-language speed vs. accuracy descriptions are shown for each. Models you've already downloaded are marked with ✓.
+- **Language selection** — auto-detect the spoken language, or manually specify any of 19 supported languages from the dropdown.
+- **SDH mode** — when enabled, non-speech audio annotations such as `[Music]`, `[Laughs]`, and `[Applause]` are included in the transcription output. When disabled, they are stripped.
+- **Save as .srt** — write the transcribed output as a standalone `.srt` file next to the video, following the same `[stem].[lang].srt` naming convention as Video Scan.
+- **Remux into video** — add the transcribed subtitle track to an MKV (via mkvmerge) or MP4 (via ffmpeg) file alongside all existing tracks.
+- **Settings > Paths** — a new Whisper model directory entry lets you control where downloaded models are stored. Leave blank to use the default SubForge data directory.
+- **GPU acceleration** — SubForge automatically uses CUDA float16 if a compatible NVIDIA GPU and torch are available, falling back to CPU int8 otherwise.
+- **14 language packs updated** — all new Transcribe tab strings are fully translated across all 14 supported interface languages.
 
 ---
 
 ## Why SubForge
 
-Subtitle files downloaded from the internet are frequently polluted with ads, distributor watermarks, credit lines, website URLs, and promotional text embedded directly into the subtitle stream. These can range from harmless to extremely inappropriate. SubForge is the ultimate answer to this problem. SubForge gets rid of them all in an easy-to-use, all-in-one package.
+Subtitle files downloaded from the internet are frequently polluted with ads, distributor watermarks, credit lines, website URLs, and promotional text embedded directly into the subtitle stream. These can range from harmless to extremely inappropriate. SubForge detects and removes all of it automatically, across entire libraries, in seconds.
+
+But SubForge is more than a cleaner. It can scan image-based subtitle tracks that no text-based tool can touch, OCR them into editable text, and feed the result through the same detection engine. It can transcribe audio directly from a video file into a subtitle track using Whisper AI — entirely offline, with no API keys or cloud services involved. Whatever the subtitle problem is, SubForge solves it.
 
 ### What makes SubForge different
 
-**Compared to manual editing:** Finding and removing these blocks by hand in a text editor across hundreds or thousands of files is tedious and error-prone. SubForge automates detection across entire libraries in seconds.
+**Compared to manual editing:** Finding and removing junk blocks by hand in a text editor across hundreds or thousands of files is tedious and error-prone. SubForge automates detection across entire libraries in one pass.
 
-**Compared to the original subcleaner:** SubForge extends subcleaner's detection engine with a full graphical interface, multi-format support (subcleaner only handles `.srt`), batch processing with a sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix-based remuxing, an in-app regex editor, and is fully cross-platform compatible. Everything subcleaner does from the command line, SubForge does with a GUI (plus so much more).
+**Compared to the original subcleaner:** SubForge shares subcleaner's foundational detection approach — regex profiles scored against subtitle blocks — but has been extended into a completely different application. SubForge adds a full graphical interface, support for every major subtitle format (subcleaner only handles `.srt`), batch processing with a live sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix and ffmpeg remuxing, PGS and VOBSUB OCR via Tesseract, Whisper AI audio transcription, an in-app regex editor, and 14 language packs. The detection engine itself has been significantly expanded with additional scoring logic, contextual punishers, structural detectors, and cleaning options that go well beyond what subcleaner provides.
 
-**Compared to online subtitle cleaners:** Online tools require uploading your subtitle files to a third-party server. SubForge runs entirely on your own machine. No files ever leave your computer. No accounts. No internet connection required at any point during use. No ads. To this author's knowledge, there are no online subtitle cleaners that support recursive folder search uploads, additional filetypes beyond `.srt`, cleaning embedded subtitles, or OCR scanning of image-based subtitle tracks (PGS/VOBSUB) — all of which SubForge excels at.
+**Compared to online subtitle cleaners:** Online tools require uploading your files to a third-party server. SubForge runs entirely on your machine. No files ever leave your computer. No accounts. No internet connection required during use. No ads. To this author's knowledge, no online subtitle tool supports recursive folder scanning, embedded subtitle cleaning, image-track OCR, or AI audio transcription — all of which SubForge handles natively.
 
 ### Key properties
 
@@ -43,7 +43,7 @@ Subtitle files downloaded from the internet are frequently polluted with ads, di
 - **Cross-platform** — written entirely in Python and PyQt6, SubForge runs on Windows, macOS, and Linux without modification. The same code, the same interface, everywhere.
 - **Open source** — every line of code is visible and auditable. The detection patterns are plain text `.conf` files you can read, edit, and extend yourself.
 - **No subscription, no license, no expiry** — SubForge is free software. There is no paid tier, no feature gating, and no nag screens.
-- **Non-destructive by default** — SubForge asks for confirmation before writing any file. Remux operations create a backup file by default before overwriting. Dry-run mode lets you preview exactly what would be removed without touching anything.
+- **Non-destructive by default** — SubForge asks for confirmation before writing any file. Dry-run mode lets you preview exactly what would be removed without touching anything.
 - **Scriptable** — the full CLI is available for automation, cron jobs, and integration with other tools, with no GUI dependency.
 
 ---
@@ -57,12 +57,19 @@ Subtitle files downloaded from the internet are frequently polluted with ads, di
 - FFmpeg (optional — only needed for Video Scan and MP4 remux)
 - MKVToolNix (optional — only needed for Clean & Remux on MKV files)
 - Tesseract OCR (optional — only needed for the Image Subs tab)
+- faster-whisper (optional — only needed for the Transcribe tab)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`requirements.txt` installs: `PyQt6`, `pysubs2`, `pytesseract`, and `Pillow`. Note that `pytesseract` and `Pillow` are only required for the Image Subs tab — the rest of SubForge works without them.
+`requirements.txt` installs: `PyQt6`, `pysubs2`, `pytesseract`, and `Pillow`. Note that `pytesseract` and `Pillow` are only required for the Image Subs tab, and `faster-whisper` is only required for the Transcribe tab — the rest of SubForge works without them.
+
+To install faster-whisper separately:
+
+```bash
+pip install faster-whisper
+```
 
 ---
 
@@ -87,7 +94,7 @@ python subforge.py movie.en.srt
 
 ## GUI Overview
 
-The main window has five tabs: **Single File**, **Batch**, **Video Scan**, **Image Subs**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
+The main window has six tabs: **Single File**, **Batch**, **Video Scan**, **Image Subs**, **Transcribe**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
 
 ---
 
@@ -142,149 +149,94 @@ For cleaning an entire media library in one pass, including libraries where each
 ![Batch Tab](images/Batch_Screenshot.png)
 
 **Workflow:**
-1. Click **Select Base Folder** and choose your top-level movies or shows folder — SubForge walks all subfolders recursively and counts every subtitle file it finds
-2. Click **Scan All** — all files are analysed in a background thread with a live progress bar
-3. Results appear in the file list, colour-coded by status. Each row shows `MovieFolder/subtitle.srt` so you can see which film each file belongs to at a glance:
-   - **Red** `[ N ads ]` — detection engine flagged blocks for removal
-   - **Orange** `[ N warns ]` — detection engine flagged warnings
-   - **Blue** `[ N opts ]` — clean from detection, but active Cleaning Options settings will modify or remove content in this file
-   - **Green** `[ clean ]` — nothing will be touched
-4. Click any file in the list to see a detailed report on the right — ad blocks appear with a red left border and pink text, `CLEAN OPT` blocks (flagged by Cleaning Options settings) appear with the same red styling, warnings with an orange border, timestamps in blue, and reason tags in grey below each block. Click **Keep — not an ad** on any block to exclude it from cleaning. Click **Show Full Report** at any time to return to the full batch summary
-5. Use the **Sensitivity slider** (1–5) to control how aggressively blocks are flagged. Moving it instantly re-colours all rows without rescanning:
-   - **1 — Very Aggressive**: catches almost everything, higher false-positive risk
-   - **2 — Aggressive**: catches most ad patterns plus borderline cases
-   - **3 — Balanced** *(default)*: matches subcleaner's original behaviour
-   - **4 — Conservative**: only removes blocks with multiple strong matches
-   - **5 — Very Conservative**: only the most obvious, unambiguous ads
-6. Optionally check **Also remove warnings** to include blocks one level below the threshold
-7. Click **Clean & Save All** — a confirmation dialog shows exactly how many blocks from how many files will be removed, then writes everything in one shot
-8. To review a specific file in detail before cleaning, select it and click **Open in Single File Tab**
+1. Click **Add Folder** to choose a root folder — SubForge will scan it recursively
+2. Click **Scan** — every subtitle file found is analysed in a background thread. Results appear in the table as they complete
+3. The table shows each file with its ad count, opts count, and warning count. Click any column header to sort
+4. Use the **Sensitivity slider** to adjust the threshold — all results update instantly
+5. Click any row to open the file's detail report in the right pane
+6. Click **Clean All** to write cleaned versions of every file in the list, or click into a single file's detail and use the individual save controls
 
 ---
 
 ## Video Scan Tab
 
-Inspects subtitle tracks embedded directly inside video container files. Useful for checking and cleaning the subtitles built into MKV and MP4 files without needing to extract them manually first.
+For scanning embedded subtitle tracks inside video files without extracting them first.
 
-![Video Scan Tab](images/Video_Scan_Screenshot.png)
-
-**Requires FFmpeg** installed and available on your system PATH. If FFmpeg is missing, a notice appears at the top of the tab. See the FFmpeg installation section below.
+![Video Scan Tab](images/Video_Screenshot.png)
 
 **Workflow:**
-1. Drop video files onto the drop zone, or use **Add Folder** to scan a directory recursively — the selected folder path is shown next to the controls
-2. Click **Scan Videos** — SubForge uses `ffprobe` to enumerate all subtitle tracks in each file, then `ffmpeg` to extract each text-based track to a temporary file, then runs the full detection engine on it
-3. Results appear as a collapsible tree — each video is a root node, its subtitle tracks are children, colour-coded by status (red = ads found, orange = warnings, green = clean, grey = image-based / unscannable)
-4. Use the **Sensitivity slider** to adjust the detection threshold — the tree and detail pane both update instantly without rescanning
-5. Click any track to see its codec, language, forced/default flags, block counts, and every flagged block with its text and matched patterns
-6. For each flagged block in the detail pane, click **Keep — not an ad** to exclude that specific block from cleaning. It will be shown struck-through and marked KEPT, and will be skipped during remux or extraction
-7. Check the box next to any flagged track you want to clean
-8. Choose your action:
-   - **Extract & Save .srt/.ass** — extracts the track, cleans it, and saves it as a standalone subtitle file next to the video, named `[video filename].[language].[ext]`. Works with any video format. Does not modify the original video. Most media players automatically detect external subtitle files.
-   - **Clean & Remux** — cleans the selected tracks and rebuilds the video file with the cleaned tracks replacing the originals. See format support below.
-9. Image-based subtitle formats (Blu-ray PGS, DVD VOBSUB) are detected and listed — click **Open in Image Subs →** in the detail pane to hand the file off to the Image Subs tab for OCR scanning.
-
-### Clean & Remux format support
-
-| Format | Backend | Requirement |
-|---|---|---|
-| `.mkv` | mkvmerge | MKVToolNix installed |
-| `.mp4` / `.m4v` | ffmpeg | FFmpeg already required for Video Scan |
-
-Both create a backup file by default (`.backup.mkv` or `.backup.mp4`) before overwriting the original. Uncheck **Keep backup** to skip this.
-
-### MKVToolNix Settings
-
-If `mkvmerge` is not on your system PATH, click **Settings** in the Video Scan tab to browse for `mkvmerge.exe` directly. The path is saved to `settings.json` and persists across restarts. SubForge also checks the default Windows install location (`C:\Program Files\MKVToolNix\mkvmerge.exe`) automatically.
+1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
+2. Click **Scan** — ffprobe reads each file's subtitle streams. Text tracks are analysed immediately; image tracks are flagged for OCR
+3. Each video appears in the left list with a color-coded summary of its subtitle tracks
+4. Click a video to see all its subtitle tracks in the detail pane. Click a track to see its blocks
+5. For clean text tracks, use **Clean & Remux** to write a new video with the cleaned subtitle replacing the original
+6. For image tracks, use **Open in Image Subs →** to hand the file off to the Image Subs tab for OCR
 
 ---
 
 ## Image Subs Tab
 
-For scanning image-based subtitle tracks (Blu-ray PGS, DVD VOBSUB) inside video files using Tesseract OCR, then running the same ad-detection engine used on text tracks.
+For scanning PGS (Blu-ray) and VOBSUB (DVD) image-based subtitle tracks using Tesseract OCR.
 
 ![Image Subs Tab](images/Image_Subs_Screenshot.png)
 
-> ⚠ **Experimental** — This tab is under active development and may produce unexpected results. Requires Tesseract OCR to be installed separately (see below).
+**Workflow:**
+1. Drop a video file onto the drop zone, or use the handoff button from Video Scan
+2. SubForge extracts one bitmap per subtitle event, runs Tesseract OCR, and assembles the text into a subtitle file
+3. The detection engine runs on the OCR output unchanged — the same pipeline as text tracks
+4. Use the **Sensitivity slider** to adjust the detection threshold
+5. Use **Save as .srt** to write the OCR'd subtitle as a standalone file next to the video
+6. Use **Remux into video** to add the text track to the video — on MKV, you can choose to replace or keep the original image track alongside it
+
+---
+
+## Transcribe Tab
+
+For generating subtitle files from a video's audio track using Whisper AI — entirely on your own machine, with no internet connection required after model download.
+
+![Transcribe Tab](images/Transcribe_Screenshot.png)
 
 **Workflow:**
-1. Drop a video file onto the drop zone, or use **Browse**, or click **Open in Image Subs →** from the Video Scan tab
-2. All image-based subtitle tracks are listed in the left pane with their codec (PGS or VOBSUB), language, and flags
-3. Select a track, then click **Scan Image Tracks**
-4. SubForge extracts the subtitle bitmaps, runs Tesseract OCR on each frame, and feeds the result through the ad-detection engine
-5. Use the **Sensitivity slider** to adjust the detection threshold — the detail pane updates instantly
-6. Review results in the detail pane — total blocks, ad blocks, warnings, and flagged samples
-7. Choose your output:
-   - **Save as .srt** — writes the OCR'd subtitle as `[video stem].[lang].srt` next to the video
-   - **Remux into video** — rebuilds the video file with the new text track replacing (or alongside) the original image track
+1. Drop a video file onto the drop zone, or use **Browse**
+2. Choose a **Model** (small is a good starting point; large gives the best accuracy)
+3. Choose a **Language** (Auto-detect works well for most content)
+4. Check **Include non-speech audio annotations** if you want `[Music]`, `[Laughs]`, etc. included in the output
+5. Click **Transcribe Audio** — the model downloads on first use and is cached locally for all future runs
+6. When transcription completes, use **Save as .srt** to write the subtitle file, or **Remux into video** to add it directly to the video file
 
-**Keep original image track** — when remuxing an MKV, check this to keep the original PGS/VOBSUB track alongside the new text track. Unchecked (default): the image track is replaced. Not available for MP4 files.
-
-### Tesseract OCR
-
-Tesseract is the OCR engine that reads text from subtitle bitmaps. It must be installed separately — SubForge bundles the Python wrapper but not the engine itself.
-
-**Windows:** Download the installer from [github.com/UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki) and run it. Then set the path in **Settings → Paths → Tesseract OCR** if it was not added to your system PATH automatically.
-
-Tesseract accuracy varies by subtitle style and source quality. Yellow-on-black subtitles (common in DVD content) and white-on-black subtitles (common in Blu-ray PGS) generally read well. Results on subtitles with complex backgrounds or very small text may be imperfect.
+> **Note:** faster-whisper must be installed separately: `pip install faster-whisper`. It is not bundled in the Windows installer. When running from the installer, faster-whisper must be installed via pip in a Python environment that is on your system PATH.
 
 ---
 
 ## Regex Editor Tab
 
-A full in-app editor for the regex pattern profiles that drive detection. Changes are saved to disk and applied immediately without restarting.
+For managing and editing the regex profiles that drive ad detection.
 
-![Regex Editor Tab](images/Regex_Screenshot.png)
-
-**Left panel — profile list:**
-Each `.conf` file in `regex_profiles/default/` appears here with its language scope. Click one to load it into the editor.
-
-**Right panel — pattern editor:**
-The raw `.conf` file content with syntax highlighting — keys in blue, regex values in green, comments in grey, section headers in yellow. Edit directly here.
-
-**Quick-add bar** (below the editor):
-Enter a section (`PURGE_REGEX` or `WARNING_REGEX`), an optional key name, and a regex value, then click **Add**. The entry is inserted automatically. Leave the key blank to auto-generate one following the existing naming scheme (e.g. `global_purge5`, `english_warn3`).
-
-**Saving:**
-Click **Save Profile** to write changes to disk and hot-reload the detection engine. Click **Discard Changes** to revert to the last saved version.
-
-**New profiles:**
-Click **+ New Profile…**, enter a name, and a template `.conf` file is created and selected automatically.
-
-**Manual reload:**
-Click **Reload Engine** at any time to re-read all profiles from disk without saving — useful if you edited a file externally.
-
----
-
-## Check for Updates
-
-Click **Check for Updates** in the status bar at any time. SubForge compares the current version against the latest release tag on GitHub and shows a dialog if a newer version is available. Clicking **Open** in that dialog opens the GitHub releases page in your browser — SubForge never downloads or installs anything automatically.
-
-This is the only network call SubForge ever makes, and only when you explicitly click the button.
+**Workflow:**
+1. Choose a profile from the dropdown (e.g. `global.conf`, `english.conf`)
+2. Edit patterns in the PURGE_REGEX or WARNING_REGEX sections
+3. Click **Save** — the engine hot-reloads immediately and all open files are re-analysed
+4. Use **+ New Profile…** to create a language-specific profile
+5. Use **Test** to verify a pattern against sample text before saving
 
 ---
 
 ## Installing FFmpeg (required for Video Scan and MP4 remux)
 
-FFmpeg is a free, open-source tool that SubForge uses to probe and extract subtitle tracks from video files, and to remux MP4 files. It is only needed for the Video Scan tab — everything else works without it.
+FFmpeg provides `ffprobe` (used for subtitle stream detection) and `ffmpeg` (used for MP4 remuxing and image subtitle extraction). It is not required for cleaning standalone subtitle files.
 
 ### Step 1 — Download FFmpeg
 
-Go to **https://ffmpeg.org/download.html**, click **Windows**, then choose the **"Windows builds by BtbN"** link. Download the latest `ffmpeg-master-latest-win64-gpl.zip` file.
+Go to **https://www.gyan.dev/ffmpeg/builds/** and download the latest **release build** (the `ffmpeg-release-essentials.zip` file). Extract the zip to a permanent location, for example `C:\ffmpeg\`.
 
-### Step 2 — Extract it
+### Step 2 — Locate the bin folder
 
-Extract the ZIP to a permanent location. A good choice is:
-
-```
-C:\ffmpeg\
-```
-
-After extracting you should have a folder structure like:
+Inside the extracted folder you will find a `bin\` subfolder containing:
 
 ```
-C:\ffmpeg\bin\ffmpeg.exe
-             \ffprobe.exe
-             \ffplay.exe
+\ffmpeg.exe
+\ffprobe.exe
+\ffplay.exe
 ```
 
 The `bin\` folder is the one that matters.
@@ -417,14 +369,17 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v0.11.0 — Whisper Audio Transcription**
-Local AI subtitle generation via Whisper — transcribe audio to subtitles entirely on-device, with SDH mode for deaf and hard of hearing viewers. No cloud, no API keys, no internet required.
+**v0.12.0 — Transcribe Tab: Inline Editing**
+Edit transcription results directly in the Transcribe tab before saving or remuxing — click any subtitle line to correct it, then output uses your edits.
+
+**v0.13.0 — Diagnostics & Polish**
+Error log viewer in Settings. Unified error logging across all tabs. Consistent log storage between source and installer modes.
 
 **v1.0.0 — Accessibility & Release**
-Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass. Native speaker verification of all 14 language packs.
+Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass.
 
 The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.10.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.11.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
