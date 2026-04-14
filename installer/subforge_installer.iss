@@ -8,12 +8,12 @@
 ;      (or run: iscc subforge_installer.iss from the repo root)
 ;
 ; Output:
-;   installer\Output\SubForge-0.9.0-setup.exe
+;   Output\SubForge-0.11.0-setup.exe
 ;
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "0.10.0"
+#define AppVersion   "0.11.0"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"
@@ -45,6 +45,9 @@ WizardStyle=modern
 SetupMutex=SubForgeSetupMutex
 ; require admin for Program Files install
 PrivilegesRequired=admin
+; suppress per-user area warning — AppData cleanup is handled in [Code]
+; at runtime using ExpandConstant so it resolves to the correct user
+UsedUserAreasWarning=no
 ; uninstaller
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
@@ -91,3 +94,20 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; F
 [UninstallDelete]
 ; clean up settings.json left behind in the install folder on uninstall
 Type: files; Name: "{app}\settings.json"
+
+[Code]
+// Delete %APPDATA%\SubForge on uninstall.
+// Using ExpandConstant at runtime ensures the path resolves to the actual
+// logged-in user's AppData, not the administrator account's AppData.
+// This covers Whisper model cache and crash logs stored there.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    AppDataDir := ExpandConstant('{userappdata}') + '\SubForge';
+    if DirExists(AppDataDir) then
+      DelTree(AppDataDir, True, True, True);
+  end;
+end;
