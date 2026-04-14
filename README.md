@@ -207,7 +207,7 @@ For cleaning an entire media library in one pass, including libraries where each
 
 For scanning embedded subtitle tracks inside video files without extracting them first.
 
-![Video Scan Tab](images/Video_Screenshot.png)
+![Video Scan Tab](images/Video_Scan_Screenshot.png)
 
 **Workflow:**
 1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
