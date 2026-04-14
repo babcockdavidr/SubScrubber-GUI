@@ -1,137 +1,30 @@
 SubForge — Development Roadmap
-Last updated: v0.11.0 (complete) — next: v1.0.0
+Last updated: v0.11.0 (complete) — next: v0.12.0
 ================================================================================
 
 COMPLETED
 --------------------------------------------------------------------------------
-v0.4.0 — MKVToolNix Update
-  - MKV Clean & Remux via mkvmerge
-  - Per-block Keep button in Video Scan and Batch detail reports
-  - Extract & Save standalone subtitle from video
-  - MKVToolNix Settings dialog (path browse, saved to settings.json)
-  - Sensitivity slider in Video Scan with live re-rendering
-  - HTML detail reports in Video Scan and Batch
-
-v0.5.0 — MP4 Remux Update
-  - MP4 and M4V remuxing via ffmpeg (no extra dependencies)
-  - Check for Updates button in status bar (opt-in, GitHub releases API)
-  - Semantic versioning (v0.x.0 format)
-  - pysubs2 added to requirements.txt
-
-v0.6.0 — Interface Overhaul
-  - Review + Report tabs merged into Single File tab
-  - Sensitivity slider added to Single File tab
-  - Tab-scoped controls (Dry run, Remove warnings, Open Folder inside Single File only)
-  - File queue moved inside Single File tab (tabs always full width, no layout shift)
-  - Show Full Report button in Batch restores full summary after drilling into a file
-  - Video Scan folder label shows selected path after Add Folder
-  - Extract & Save filename format: [video stem].[lang].[ext], SDH auto-detected
-  - File queue shows color only (no stale count badges that don't reflect slider)
-  - Toolbar gap fixed
-  - Button height consistency fixed across all tabs
-  - MKVToolNix notice updated to reflect MP4 support without mkvmerge
-
-v0.7.0 — Subtitle Cleaning Options
-  - core/cleaner_options.py — full content cleaning engine
-  - Track title normalization on remux (encoder credits stripped, always on)
-  - Global Settings dialog: Cleaning Options + Paths tabs, persists to settings.json
-  - Settings button (⚙) top-right of toolbar
-  - CLEAN OPT blue indicators in Single File, Batch, and Video Scan
-  - Opts count in Single File bottom bar
-  - Batch slider preserves detail view when moved
-  - Opts-only tracks selectable in Video Scan
-  - Cleaning actions shown in reports after save
-  - File queue selection highlight fixed (neutral color, not status color)
-
-v0.8.0 — Settings Expansion & Polish
-  - App renamed to SubForge; entry point subforge.py; GitHub repo updated in updater.py
-  - About tab in Settings: primary credit David R. Babcock, GitHub link, MIT license,
-    Report an Issue button, KBlixt/subcleaner secondary credit
-  - General tab in Settings: default sensitivity (global, all tabs), language selector
-    (English + Spanish; additional languages via dropdown), Coming in v1.0.0 placeholders
-  - String extraction: all Qt widget strings moved to gui/strings.py (flat dict)
-    HTML report strings deferred to v0.9.0
-  - Spanish translation: full STRINGS_ES dictionary, language persists to settings.json,
-    restart prompt appears when language changes with one-click restart via os.execv
-  - Column sort on Batch: QTableWidget with File/Ads/Opts/Warns columns,
-    clickable headers, numeric sort, row colors preserved
-  - Threshold labels unified across all tabs (removed rm≥N and TV/Movies annotations)
-  - Sensitivity slider default now user-configurable in Settings General tab
-  - Updater error dialog distinguishes 404 from network failure
-  - Translation fallback: missing keys fall back to English, then show a
-    visible placeholder directing user to Report an Issue
-
-v0.9.0 — Packaging & Distribution
-  - Full string extraction for HTML reports in Batch and Video Scan;
-    14 language packs added (EN, ES, NL, HE, ID, PT, SV, FR, AR, ZH, HI, RU, TR, PL)
-  - Session memory: last Batch folder, last Video Scan folder, and window
-    size/position saved to settings.json and restored on next launch
-  - First-run setup wizard: fires once on first launch, detects FFmpeg and
-    MKVToolNix, shows green/red status per tool with download links
-  - core/paths.py: centralised path resolution that works correctly both
-    from source and inside a PyInstaller bundle
-  - PyInstaller packaging: subforge.spec bundles the app into a standalone
-    executable for Windows (macOS and Linux binaries deferred post-1.0)
-  - Windows installer: Inno Setup script (installer/subforge_installer.iss)
-    installs to Program Files, creates Start Menu shortcut, optional file
-    associations for .srt/.ass/.vtt, includes uninstaller
-  - GitHub Actions workflow: .github/workflows/build.yml auto-builds the Windows
-    installer and attaches it to the GitHub release on tag push
-    (macOS and Linux jobs written but disabled — pending hardware testing)
-  - Double-click behaviour: launching with no arguments now opens the GUI
-    instead of printing CLI help
-
-v0.10.0 — OCR for Image-Based Subtitles ✓ COMPLETE
-  - Image Subs tab: dedicated tab for scanning PGS and VOBSUB image-based
-    subtitle tracks using Tesseract OCR
-  - PGS path: raw .sup stream extracted via ffmpeg, parsed in pure Python
-    with correct BT.601 limited-range YCbCr conversion and RLE decoder;
-    bitmaps decoded and OCR'd in memory — no video decode required
-  - VOBSUB path: ffmpeg 1fps overlay onto native subtitle canvas resolution
-    (probed per-stream, not assumed from video dimensions), dedup, then OCR
-  - Preprocessing pipeline: alpha-style detection (alpha-only vs colored text),
-    appropriate background composite, bbox crop, 3x upscale
-  - Tesseract garbage output filter ([PIL], isolated punctuation) applied to
-    both PGS and VOBSUB paths
-  - Detection engine runs on OCR output unchanged — same pipeline as text tracks
-  - Save as .srt: OCR'd output saved as [stem].[lang].srt next to video
-  - Remux into video: replace or keep-alongside original image track (MKV via
-    mkvmerge; MP4/M4V via ffmpeg — keep-alongside not available for MP4)
-  - Sensitivity slider on Image Subs tab, respects Settings > General default
-  - Open in Image Subs: Video Scan hands off image-track files directly
-  - Settings > Paths expanded: ffmpeg, ffprobe, Tesseract each have path entries
-  - First-run wizard updated to surface Tesseract alongside FFmpeg and MKVToolNix
-  - Language selector in first-run wizard — restarts app to apply fully
-  - System language auto-detection on first launch
-  - 14 language packs fully updated for all new Image Subs strings
-  - Settings Save/Cancel buttons and sensitivity labels now translatable
-  - What's New button in Settings > About — reads bundled CHANGELOG.md
-  - pytesseract and Pillow bundled in Windows installer via PyInstaller
-  - Experimental warning banner on Image Subs tab
-
 v0.11.0 — Whisper Audio Transcription ✓ COMPLETE
   - Transcribe tab: dedicated tab for generating subtitles from video audio
     using faster-whisper AI, running fully offline with no API keys required
   - Model selection: tiny / base / small / medium / large with plain-language
     speed vs. accuracy descriptions; downloaded models marked with ✓
   - Language selection: auto-detect or manual ISO language code
-  - SDH mode: include sound descriptions and non-speech annotations;
-    on by default with an accessibility warning when disabled
+  - SDH mode: non-speech audio annotations (music, applause, etc.) included
+    when enabled; suppress_tokens and vad_filter tuned per mode
   - Save as .srt: write transcribed output as [stem].[lang].srt next to video
   - Remux into video: add transcribed track to MKV (mkvmerge) or MP4 (ffmpeg)
     alongside existing tracks
   - Settings > Paths: Whisper model directory entry (browse for folder;
     blank = default location in SubForge data dir)
   - CUDA GPU acceleration when torch + CUDA available; falls back to CPU int8
+  - Subprocess isolation: transcription runs in a separate Python process to
+    prevent CTranslate2 native libraries from conflicting with Qt's runtime
+  - Flat model storage: models stored without HF Hub symlinks for compatibility
+    with Windows machines that don't have Developer Mode enabled
+  - 14 language packs fully updated for all new Transcribe tab strings
   - core/whisper.py: path/model management, transcription pipeline, SDH
     segment detection, SRT assembly — all independent of GUI
-
-  KNOWN ISSUES — must fix before tagging v0.11.0 release:
-  - Whisper crash resolved — moved transcription to isolated subprocess so
-    CTranslate2 native libraries can't conflict with Qt's thread runtime.
-  - All 13 non-EN language packs now have full translations for all 53 new
-    v0.11.0 strings. Translation quality for HE, AR, ZH, HI, ID should be
-    reviewed by native speakers before the 1.0.0 release.
 
 PLANNED
 --------------------------------------------------------------------------------
@@ -146,7 +39,26 @@ v0.12.0 — Transcribe Tab: Inline Editing
     not the raw Whisper output. This allows correcting transcription errors
     before saving or remuxing.
 
+v0.13.0 — Diagnostics & Polish
+  - Error log viewer: button in Settings (About tab or dedicated Diagnostics
+    tab) that opens the crash log if it exists, or shows "No errors logged
+    yet" if it doesn't. Log path: %APPDATA%\SubForge\subforge_crash.log
+    when running from the installer, or <repo_root>/subforge_crash.log
+    when running from source.
+  - Unified error logging: roll errors from all tabs (Single File, Batch,
+    Video Scan, Image Subs, Transcribe) into the same log file, not just
+    unhandled launch exceptions. Each entry should include a timestamp,
+    the tab/module of origin, and the full traceback.
+  - Log storage consistency: source-mode writes log to repo root (already
+    writable, no AppData dependency); installer mode writes to
+    %APPDATA%\SubForge\ (already correct for Whisper crash log).
+
 v1.0.0 — Accessibility, Polish & Release
+  - Uninstaller cleans up %APPDATA%\SubForge\ — this directory now holds
+    Whisper models (potentially several GB) and the crash log. The uninstaller
+    should prompt the user and offer to delete it, rather than leaving it
+    silently behind. Implement via [UninstallDelete] in the .iss file with
+    a user prompt, or a [Code] section for conditional deletion.
   - Light theme and high contrast theme (toggle in Settings)
   - Font size setting (small/medium/large)
   - Keyboard navigation audit — every action reachable without mouse
