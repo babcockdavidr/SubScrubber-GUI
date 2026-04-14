@@ -162,7 +162,7 @@ For cleaning an entire media library in one pass, including libraries where each
 
 For scanning embedded subtitle tracks inside video files without extracting them first.
 
-![Video Scan Tab](images/Video_Screenshot.png)
+![Video Scan Tab](images/Video_Scan_Screenshot.png)
 
 **Workflow:**
 1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
@@ -211,6 +211,8 @@ For generating subtitle files from a video's audio track using Whisper AI — en
 ## Regex Editor Tab
 
 For managing and editing the regex profiles that drive ad detection.
+
+![Regex Editor Tab](images/Regex_Editor_Screenshot.png)
 
 **Workflow:**
 1. Choose a profile from the dropdown (e.g. `global.conf`, `english.conf`)
