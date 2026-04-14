@@ -269,6 +269,7 @@ class ImageSubsDropZone(QFrame):
         msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
         browse = QPushButton(STRINGS["img_btn_browse"])
         browse.setMaximumWidth(100)
+        browse.setToolTip(STRINGS["tip_img_browse"])
         browse.clicked.connect(self._browse)
         layout.addWidget(icon)
         layout.addWidget(msg)
@@ -299,6 +300,8 @@ class ImageSubsDropZone(QFrame):
 # ---------------------------------------------------------------------------
 
 class ImageSubsPanel(QWidget):
+    status_updated = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._video_path:    Optional[Path]          = None
@@ -306,6 +309,7 @@ class ImageSubsPanel(QWidget):
         self._current_track: Optional[SubtitleTrack] = None
         self._worker:        Optional[OcrWorker]     = None
         self._threshold:     int                     = load_default_sensitivity()
+        self._status_text:   str                     = STRINGS["img_status_load"]
         self._build_ui()
         self._check_tools()
 
@@ -339,12 +343,14 @@ class ImageSubsPanel(QWidget):
         self._btn_clear = QPushButton(STRINGS["img_btn_clear"])
         self._btn_clear.clicked.connect(self._clear)
         self._btn_clear.setEnabled(False)
+        self._btn_clear.setToolTip(STRINGS["tip_img_clear"])
         self._lbl_file = QLabel(STRINGS["img_no_file"])
         self._lbl_file.setObjectName("file_status")
         self._lbl_file.setStyleSheet(f"color: {FG2};")
         self._btn_scan = QPushButton(STRINGS["img_btn_scan"])
         self._btn_scan.setObjectName("btn_clean_all")
         self._btn_scan.setEnabled(False)
+        self._btn_scan.setToolTip(STRINGS["tip_img_scan"])
         self._btn_scan.clicked.connect(self._scan)
         ctrl.addWidget(self._btn_clear)
         ctrl.addWidget(self._lbl_file, stretch=1)
@@ -355,9 +361,6 @@ class ImageSubsPanel(QWidget):
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
         self._progress.setRange(0, 0)
-
-        self._lbl_status = QLabel(STRINGS["img_status_load"])
-        self._lbl_status.setObjectName("file_status")
 
         # ── Drop zone ─────────────────────────────────────────────────────
         self._drop_zone = ImageSubsDropZone()
@@ -405,25 +408,16 @@ class ImageSubsPanel(QWidget):
         self._chk_backup.setChecked(True)
         self._chk_keep_original = QCheckBox(STRINGS["img_chk_keep_original"])
         self._chk_keep_original.setChecked(False)
-        self._chk_keep_original.setToolTip(
-            "When remuxing an MKV, keep the original PGS/VOBSUB track alongside the new text track.\n"
-            "Unchecked (default): replace the image track with the cleaned text track.\n"
-            "Not available for MP4 files."
-        )
+        self._chk_keep_original.setToolTip(STRINGS["tip_img_keep_original"])
         self._btn_save_srt = QPushButton(STRINGS["img_btn_save_srt"])
         self._btn_save_srt.setObjectName("btn_keep")
         self._btn_save_srt.setEnabled(False)
-        self._btn_save_srt.setToolTip(
-            "Save the OCR'd subtitle as a standalone .srt file next to the video."
-        )
+        self._btn_save_srt.setToolTip(STRINGS["tip_img_save_srt"])
         self._btn_save_srt.clicked.connect(self._save_srt)
         self._btn_remux = QPushButton(STRINGS["img_btn_remux"])
         self._btn_remux.setObjectName("btn_save")
         self._btn_remux.setEnabled(False)
-        self._btn_remux.setToolTip(
-            "Rebuild the video file with the OCR'd text track replacing (or alongside) "
-            "the image track. Only supported for MKV files."
-        )
+        self._btn_remux.setToolTip(STRINGS["tip_img_remux"])
         self._btn_remux.clicked.connect(self._remux)
         action_bar.addWidget(self._chk_backup)
         action_bar.addWidget(self._chk_keep_original)
@@ -459,8 +453,18 @@ class ImageSubsPanel(QWidget):
         root.addLayout(ctrl)
         root.addWidget(self._drop_zone)
         root.addWidget(self._progress)
-        root.addWidget(self._lbl_status)
         root.addWidget(splitter, stretch=1)
+
+    # ── Status helper ─────────────────────────────────────────────────────
+
+    def _set_status(self, msg: str):
+        """Emit status to the app-level bar via signal."""
+        self._status_text = msg
+        self.status_updated.emit(msg)
+
+    def get_status(self) -> str:
+        """Return the current status text (used by MainWindow on tab switch)."""
+        return self._status_text
 
     # ── Tool checks ───────────────────────────────────────────────────────
 
@@ -479,7 +483,7 @@ class ImageSubsPanel(QWidget):
         self._lbl_file.setText(path.name)
         self._lbl_file.setStyleSheet(f"color: {FG};")
         self._btn_clear.setEnabled(True)
-        self._lbl_status.setText(STRINGS["img_status_probing"].format(name=path.name))
+        self._set_status(STRINGS["img_status_probing"].format(name=path.name))
         self._tree.clear()
         self._detail.setHtml(_welcome_html())
         self._btn_scan.setEnabled(False)
@@ -495,18 +499,18 @@ class ImageSubsPanel(QWidget):
 
         tracks, err = probe_video(path)
         if err:
-            self._lbl_status.setText(f"Error: {err}")
+            self._set_status(f"Error: {err}")
             return
 
         image_tracks = [t for t in tracks if t.is_image]
         self._tracks = image_tracks
 
         if not image_tracks:
-            self._lbl_status.setText(STRINGS["img_status_no_tracks"])
+            self._set_status(STRINGS["img_status_no_tracks"])
             self._detail.setHtml(_no_image_tracks_html())
             return
 
-        self._lbl_status.setText(
+        self._set_status(
             STRINGS["img_status_found"].format(n=len(image_tracks))
             if tesseract_available() else
             STRINGS["img_status_no_tess"].format(n=len(image_tracks))
@@ -541,6 +545,34 @@ class ImageSubsPanel(QWidget):
                     item.setForeground(0, QColor(GREEN))
                 break
 
+    def _refresh_tree_colors(self):
+        """Recolor all tree items based on the current threshold.
+
+        _update_tree_item_color() reads track.ad_count which is fixed at scan
+        time. This method recomputes directly from block regex_matches so the
+        tree reflects whichever threshold the slider is currently at.
+        """
+        t = self._threshold
+        for i in range(self._tree.topLevelItemCount()):
+            item = self._tree.topLevelItem(i)
+            track = item.data(0, Qt.ItemDataRole.UserRole)
+            if track is None:
+                continue
+            if track.scan_error:
+                item.setForeground(0, QColor("#888888"))
+            elif track.subtitle is not None:
+                sub = track.subtitle
+                ads   = sum(1 for b in sub.blocks if b.regex_matches >= t)
+                warns = sum(1 for b in sub.blocks
+                            if b.regex_matches == t - 1 and t > 1)
+                if ads > 0:
+                    item.setForeground(0, QColor(RED))
+                elif warns > 0:
+                    item.setForeground(0, QColor(ORANGE))
+                else:
+                    item.setForeground(0, QColor(GREEN))
+            # tracks that haven't been scanned yet keep their default FG2 color
+
     def _clear(self):
         self._video_path    = None
         self._tracks        = []
@@ -548,7 +580,7 @@ class ImageSubsPanel(QWidget):
         self._tree.clear()
         self._lbl_file.setText("No file loaded")
         self._lbl_file.setStyleSheet(f"color: {FG2};")
-        self._lbl_status.setText("Load a video file to begin.")
+        self._set_status("Load a video file to begin.")
         self._detail.setHtml(_welcome_html())
         self._btn_clear.setEnabled(False)
         self._btn_scan.setEnabled(False)
@@ -591,7 +623,7 @@ class ImageSubsPanel(QWidget):
         self._btn_remux.setEnabled(False)
         self._progress.setVisible(True)
         self._progress.setRange(0, 0)   # indeterminate until first frame arrives
-        self._lbl_status.setText(STRINGS["img_status_starting"])
+        self._set_status(STRINGS["img_status_starting"])
 
         self._worker = OcrWorker(self._video_path, [self._current_track])
         self._worker.progress.connect(self._on_ocr_progress)
@@ -611,10 +643,11 @@ class ImageSubsPanel(QWidget):
         # Re-render detail pane if a scanned track is selected
         if self._current_track and self._current_track.subtitle is not None:
             self._detail.setHtml(_post_scan_html(self._current_track, self._threshold))
-            self._update_tree_item_color(self._current_track)
+        # Recolor ALL scanned tree items at the new threshold
+        self._refresh_tree_colors()
 
     def _on_ocr_progress(self, msg: str):
-        self._lbl_status.setText(msg)
+        self._set_status(msg)
         # Only update detail pane if the currently selected track has no
         # results yet — don't clobber a track that already finished
         if (self._current_track is not None
@@ -668,7 +701,7 @@ class ImageSubsPanel(QWidget):
             parts.append(STRINGS["img_status_with_ads"].format(n=with_ads))
         if errors:
             parts.append(STRINGS["img_status_errors"].format(n=errors))
-        self._lbl_status.setText("  ".join(parts))
+        self._set_status("  ".join(parts))
 
     # ── Output (Phase 5) ─────────────────────────────────────────────────
 
@@ -701,7 +734,7 @@ class ImageSubsPanel(QWidget):
             QMessageBox.critical(self, STRINGS["img_dlg_save_failed"], str(e))
             return
 
-        self._lbl_status.setText(STRINGS["img_status_saved"].format(name=out_path.name))
+        self._set_status(STRINGS["img_status_saved"].format(name=out_path.name))
 
     def _remux(self):
         """Remux the OCR'd subtitle back into the video, replacing or alongside the image track."""
@@ -771,7 +804,7 @@ class ImageSubsPanel(QWidget):
             self._btn_save_srt.setEnabled(False)
             self._btn_scan.setEnabled(False)
             self._progress.setVisible(True)
-            self._lbl_status.setText(STRINGS["img_status_remuxing"])
+            self._set_status(STRINGS["img_status_remuxing"])
 
             if keep_original:
                 result = self._remux_keep_original(
@@ -783,7 +816,7 @@ class ImageSubsPanel(QWidget):
                     all_tracks,
                     [cleaned_track],
                     make_backup=make_backup,
-                    progress_cb=lambda msg: self._lbl_status.setText(msg),
+                    progress_cb=lambda msg: self._set_status(msg),
                 )
             else:
                 # MP4/M4V — use ffmpeg
@@ -792,7 +825,7 @@ class ImageSubsPanel(QWidget):
                     all_tracks,
                     [cleaned_track],
                     make_backup=make_backup,
-                    progress_cb=lambda msg: self._lbl_status.setText(msg),
+                    progress_cb=lambda msg: self._set_status(msg),
                 )
 
         self._progress.setVisible(False)
@@ -802,10 +835,10 @@ class ImageSubsPanel(QWidget):
 
         if result.success:
             backup_msg = f"  Backup: {result.backup_path.name}" if result.backup_path else ""
-            self._lbl_status.setText((STRINGS["img_status_remux_backup"].format(name=result.backup_path.name) if result.backup_path else STRINGS["img_status_remux_ok"]))
+            self._set_status((STRINGS["img_status_remux_backup"].format(name=result.backup_path.name) if result.backup_path else STRINGS["img_status_remux_ok"]))
         else:
             QMessageBox.critical(self, STRINGS["img_dlg_remux_failed"], result.error)
-            self._lbl_status.setText(STRINGS["img_status_remux_fail"])
+            self._set_status(STRINGS["img_status_remux_fail"])
 
     def _remux_keep_original(self, all_tracks, cleaned_track, make_backup, srt_path):
         """

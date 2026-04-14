@@ -211,6 +211,7 @@ class TranscribeDropZone(QFrame):
 
         browse = QPushButton(STRINGS["tr_btn_browse"])
         browse.setMaximumWidth(100)
+        browse.setToolTip(STRINGS["tip_tr_browse"])
         browse.clicked.connect(self._browse)
 
         layout.addWidget(icon)
@@ -244,6 +245,7 @@ class TranscribeDropZone(QFrame):
 
 class TranscribePanel(QWidget):
     """Transcribe tab — Whisper audio transcription pipeline."""
+    status_updated = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -251,6 +253,7 @@ class TranscribePanel(QWidget):
         self._result:     Optional[TranscribeResult] = None
         self._subtitle    = None
         self._worker:     Optional[TranscribeWorker] = None
+        self._status_text: str                       = STRINGS["tr_status_load"]
         self._build_ui()
         self._check_tools()
 
@@ -285,6 +288,7 @@ class TranscribePanel(QWidget):
         self._btn_clear = QPushButton(STRINGS["tr_btn_clear"])
         self._btn_clear.clicked.connect(self._clear)
         self._btn_clear.setEnabled(False)
+        self._btn_clear.setToolTip(STRINGS["tip_tr_clear"])
 
         self._lbl_file = QLabel(STRINGS["tr_no_file"])
         self._lbl_file.setObjectName("file_status")
@@ -320,6 +324,7 @@ class TranscribePanel(QWidget):
         self._btn_transcribe = QPushButton(STRINGS["tr_btn_transcribe"])
         self._btn_transcribe.setObjectName("btn_clean_all")
         self._btn_transcribe.setEnabled(False)
+        self._btn_transcribe.setToolTip(STRINGS["tip_tr_transcribe"])
         self._btn_transcribe.clicked.connect(self._start_transcribe)
 
         ctrl.addWidget(self._btn_clear)
@@ -335,9 +340,6 @@ class TranscribePanel(QWidget):
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
         self._progress.setRange(0, 0)
-
-        self._lbl_status = QLabel(STRINGS["tr_status_load"])
-        self._lbl_status.setObjectName("file_status")
 
         # ── Drop zone ─────────────────────────────────────────────────────
         self._drop_zone = TranscribeDropZone()
@@ -377,10 +379,12 @@ class TranscribePanel(QWidget):
         self._btn_save_srt = QPushButton(STRINGS["tr_btn_save_srt"])
         self._btn_save_srt.setObjectName("btn_keep")
         self._btn_save_srt.setEnabled(False)
+        self._btn_save_srt.setToolTip(STRINGS["tip_tr_save_srt"])
         self._btn_save_srt.clicked.connect(self._save_srt)
         self._btn_remux = QPushButton(STRINGS["tr_btn_remux"])
         self._btn_remux.setObjectName("btn_save")
         self._btn_remux.setEnabled(False)
+        self._btn_remux.setToolTip(STRINGS["tip_tr_remux"])
         self._btn_remux.clicked.connect(self._remux)
         action_bar.addWidget(self._chk_backup)
         action_bar.addStretch()
@@ -468,8 +472,18 @@ class TranscribePanel(QWidget):
         root.addLayout(ctrl)
         root.addWidget(self._drop_zone)
         root.addWidget(self._progress)
-        root.addWidget(self._lbl_status)
         root.addWidget(splitter, stretch=1)
+
+    # ── Status helper ─────────────────────────────────────────────────────
+
+    def _set_status(self, msg: str):
+        """Emit status to the app-level bar via signal."""
+        self._status_text = msg
+        self.status_updated.emit(msg)
+
+    def get_status(self) -> str:
+        """Return the current status text (used by MainWindow on tab switch)."""
+        return self._status_text
 
     # ── Tool check ────────────────────────────────────────────────────────
 
@@ -518,7 +532,7 @@ class TranscribePanel(QWidget):
         self._btn_save_srt.setEnabled(False)
         self._btn_remux.setEnabled(False)
         self._progress.setVisible(False)
-        self._lbl_status.setText(STRINGS["tr_status_load"])
+        self._set_status(STRINGS["tr_status_load"])
         self._detail.setHtml(_welcome_html())
         self._detail_stack.setCurrentIndex(0)
         self._edit_table.setRowCount(0)
@@ -536,7 +550,7 @@ class TranscribePanel(QWidget):
         self._btn_save_srt.setEnabled(False)
         self._btn_remux.setEnabled(False)
         self._progress.setVisible(False)
-        self._lbl_status.setText(STRINGS["tr_status_load"])
+        self._set_status(STRINGS["tr_status_load"])
         self._detail.setHtml(_welcome_html())
         self._detail_stack.setCurrentIndex(0)
         self._edit_table.setRowCount(0)
@@ -557,7 +571,7 @@ class TranscribePanel(QWidget):
         self._btn_clear.setEnabled(False)
         self._progress.setRange(0, 0)
         self._progress.setVisible(True)
-        self._lbl_status.setText(STRINGS["tr_status_transcribing"])
+        self._set_status(STRINGS["tr_status_transcribing"])
         # Reset to browser page while transcription is in progress
         self._edit_table.setRowCount(0)
         self._lbl_edit_hint.setVisible(False)
@@ -576,11 +590,11 @@ class TranscribePanel(QWidget):
         self._worker.start()
 
     def _on_progress(self, msg: str):
-        self._lbl_status.setText(msg)
+        self._set_status(msg)
         self._detail.setHtml(_transcribing_html(msg))
 
     def _on_segment(self, n: int):
-        self._lbl_status.setText(STRINGS["tr_status_segments"].format(n=n))
+        self._set_status(STRINGS["tr_status_segments"].format(n=n))
 
     def _on_finished(self):
         result = self._worker.result
@@ -589,7 +603,7 @@ class TranscribePanel(QWidget):
             self._progress.setVisible(False)
             self._btn_clear.setEnabled(True)
             self._btn_transcribe.setEnabled(faster_whisper_available())
-            self._lbl_status.setText(STRINGS["tr_status_error"])
+            self._set_status(STRINGS["tr_status_error"])
             return
         self._progress.setVisible(False)
         self._btn_clear.setEnabled(True)
@@ -597,7 +611,7 @@ class TranscribePanel(QWidget):
         self._result = result
 
         if not result.success:
-            self._lbl_status.setText(STRINGS["tr_status_error"])
+            self._set_status(STRINGS["tr_status_error"])
             self._detail.setHtml(
                 HTML_STYLE
                 + '<div class="section">Error</div>'
@@ -608,7 +622,7 @@ class TranscribePanel(QWidget):
         self._subtitle = self._build_subtitle(result)
 
         if self._subtitle is None:
-            self._lbl_status.setText(STRINGS["tr_dlg_empty_msg"])
+            self._set_status(STRINGS["tr_dlg_empty_msg"])
             self._detail.setHtml(
                 HTML_STYLE
                 + '<div class="section">Result</div>'
@@ -616,7 +630,7 @@ class TranscribePanel(QWidget):
             )
             return
 
-        self._lbl_status.setText(
+        self._set_status(
             STRINGS["tr_status_done"].format(
                 n=len(result.segments), lang=result.language or "?"
             )
@@ -734,7 +748,7 @@ class TranscribePanel(QWidget):
             QMessageBox.critical(self, STRINGS["tr_dlg_save_failed"], str(e))
             return
 
-        self._lbl_status.setText(STRINGS["tr_status_saved"].format(name=out_path.name))
+        self._set_status(STRINGS["tr_status_saved"].format(name=out_path.name))
 
     # ── Remux ─────────────────────────────────────────────────────────────
 
@@ -778,7 +792,7 @@ class TranscribePanel(QWidget):
         self._btn_transcribe.setEnabled(False)
         self._progress.setRange(0, 0)
         self._progress.setVisible(True)
-        self._lbl_status.setText(STRINGS["tr_status_remuxing"])
+        self._set_status(STRINGS["tr_status_remuxing"])
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_srt = Path(tmpdir) / srt_name
@@ -801,11 +815,11 @@ class TranscribePanel(QWidget):
         self._btn_transcribe.setEnabled(faster_whisper_available())
 
         if result is None or result.success:
-            self._lbl_status.setText(STRINGS["tr_status_remux_ok"])
+            self._set_status(STRINGS["tr_status_remux_ok"])
         else:
             QMessageBox.critical(self, STRINGS["tr_dlg_remux_failed"],
                                  getattr(result, "error", "Unknown error"))
-            self._lbl_status.setText(STRINGS["tr_status_remux_fail"])
+            self._set_status(STRINGS["tr_status_remux_fail"])
 
     def _remux_mkv(self, tmp_srt: Path, lang: str):
         import subprocess, sys, shutil

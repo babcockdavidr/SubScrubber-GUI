@@ -185,12 +185,14 @@ class SettingsDialog(QDialog):
             f"padding: 6px 18px; font-size: 10pt; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
+        self._btn_cancel.setToolTip(STRINGS["tip_settings_cancel"])
         self._btn_cancel.clicked.connect(self.reject)
         self._btn_save = QPushButton(STRINGS["settings_btn_save"])
         self._btn_save.setStyleSheet(
             f"padding: 6px 18px; font-size: 10pt; color: {BG}; "
             f"border: none; border-radius: 3px; background: {ACCENT};"
         )
+        self._btn_save.setToolTip(STRINGS["tip_settings_save"])
         self._btn_save.clicked.connect(self._save)
         btn_bar.addWidget(self._btn_cancel)
         btn_bar.addWidget(self._btn_save)
@@ -498,6 +500,7 @@ class SettingsDialog(QDialog):
             f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
+        btn_issue.setToolTip(STRINGS["tip_settings_report_issue"])
         btn_issue.clicked.connect(lambda: webbrowser.open(
             "https://github.com/babcockdavidr/SubForge/issues/new"
         ))
@@ -506,12 +509,14 @@ class SettingsDialog(QDialog):
             f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
+        btn_whats_new.setToolTip(STRINGS["tip_settings_whats_new"])
         btn_whats_new.clicked.connect(self._show_changelog)
         btn_log = QPushButton(STRINGS["settings_btn_view_log"])
         btn_log.setStyleSheet(
             f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
+        btn_log.setToolTip(STRINGS["tip_settings_view_log"])
         btn_log.clicked.connect(self._show_error_log)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
@@ -640,6 +645,7 @@ class SettingsDialog(QDialog):
             if current_val:
                 inp.setText(current_val)
             btn = QPushButton(STRINGS["settings_browse"])
+            btn.setToolTip(STRINGS["tip_settings_browse"])
             btn.clicked.connect(browse_fn)
             path_row.addWidget(inp, stretch=1)
             path_row.addWidget(btn)
@@ -719,6 +725,7 @@ class SettingsDialog(QDialog):
         if _whisper_display:
             self._whisper_dir_input.setText(_whisper_display)
         btn_browse_whisper = QPushButton(STRINGS["settings_browse"])
+        btn_browse_whisper.setToolTip(STRINGS["tip_settings_browse"])
         btn_browse_whisper.clicked.connect(self._browse_whisper_dir)
         wpath_row.addWidget(self._whisper_dir_input, stretch=1)
         wpath_row.addWidget(btn_browse_whisper)
@@ -962,17 +969,34 @@ class SettingsDialog(QDialog):
 
         self.accept()
 
-        # Offer restart if language changed
+        # Offer restart if language changed — use a custom dialog so button
+        # labels come from STRINGS (already switched to the new language)
+        # rather than the OS-supplied Yes/No which ignores our translations.
         if lang_code != prev_lang:
             import sys, os, subprocess
-            from PyQt6.QtWidgets import QMessageBox, QApplication
-            btn = QMessageBox.question(
-                None,
-                STRINGS["settings_btn_restart"],
-                STRINGS["settings_restart_required"],
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if btn == QMessageBox.StandardButton.Yes:
+            from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel,
+                                         QHBoxLayout, QPushButton, QApplication)
+            dlg = QDialog(None)
+            dlg.setWindowTitle(STRINGS["settings_btn_restart"])
+            dlg.setMinimumWidth(360)
+            _layout = QVBoxLayout(dlg)
+            _layout.setSpacing(16)
+            _layout.setContentsMargins(20, 20, 20, 20)
+            _lbl = QLabel(STRINGS["settings_restart_required"])
+            _lbl.setWordWrap(True)
+            _layout.addWidget(_lbl)
+            _btn_row = QHBoxLayout()
+            _btn_row.addStretch()
+            _btn_later = QPushButton(STRINGS["settings_btn_restart_later"])
+            _btn_now   = QPushButton(STRINGS["settings_btn_restart"])
+            _btn_now.setDefault(True)
+            _btn_later.clicked.connect(dlg.reject)
+            _btn_now.clicked.connect(dlg.accept)
+            _btn_row.addWidget(_btn_later)
+            _btn_row.addWidget(_btn_now)
+            _layout.addLayout(_btn_row)
+            want_restart = dlg.exec() == QDialog.DialogCode.Accepted
+            if want_restart:
                 # Frozen bundle: relaunch exe directly.
                 # Source: relaunch via Python interpreter.
                 frozen = getattr(sys, "frozen", False)
@@ -986,6 +1010,12 @@ class SettingsDialog(QDialog):
                     creationflags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
 
                 subprocess.Popen(args, close_fds=True, creationflags=creationflags)
+                # Redirect stderr to null before quitting — faster_whisper/ctranslate2
+                # hold a logging handler that flushes sys.stderr during teardown.
+                # Qt sets sys.stderr to None on exit, which causes an AttributeError
+                # in transformers' logging shutdown. This silences it cleanly.
+                import io
+                sys.stderr = io.StringIO()
                 app = QApplication.instance()
                 if app:
                     app.quit()

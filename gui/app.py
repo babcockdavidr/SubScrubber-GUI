@@ -397,6 +397,7 @@ class DropZone(QFrame):
 
         browse = QPushButton(STRINGS["sf_browse"])
         browse.setMaximumWidth(100)
+        browse.setToolTip(STRINGS["tip_sf_browse"])
         browse.clicked.connect(self._browse)
 
         layout.addWidget(icon)
@@ -467,6 +468,7 @@ class MainWindow(QMainWindow):
             f"font-size: 9pt; padding: 2px 10px; color: {FG2};"
             f"border: 1px solid {BORDER}; border-radius: 3px; background: transparent;"
         )
+        self._btn_settings.setToolTip(STRINGS["tip_btn_settings"])
         toolbar.addWidget(self._btn_settings)
 
         # Status bar
@@ -481,6 +483,7 @@ class MainWindow(QMainWindow):
             f"font-size: 9pt; padding: 1px 8px; color: {FG2};"
             f"border: 1px solid {BORDER}; border-radius: 3px; background: transparent;"
         )
+        self._btn_check_updates.setToolTip(STRINGS["tip_btn_check_updates"])
         self._btn_check_updates.clicked.connect(self._check_for_updates)
         self._status.addPermanentWidget(self._btn_check_updates)
         self._status.addPermanentWidget(self._version_label)
@@ -524,6 +527,7 @@ class MainWindow(QMainWindow):
         self._chk_dry_run = QCheckBox(STRINGS["sf_chk_dry_run"])
         self._chk_warnings = QCheckBox(STRINGS["sf_chk_remove_warnings"])
         self._btn_open_folder = QPushButton(STRINGS["sf_btn_open_folder"])
+        self._btn_open_folder.setToolTip(STRINGS["tip_sf_open_folder"])
 
         # Sensitivity slider for single file
         sf_thresh_frame = QFrame()
@@ -634,8 +638,10 @@ class MainWindow(QMainWindow):
         btn_row = QHBoxLayout()
         self._btn_mark_ad = QPushButton(STRINGS["sf_btn_mark_ad"])
         self._btn_mark_ad.setObjectName("btn_remove")
+        self._btn_mark_ad.setToolTip(STRINGS["tip_sf_mark_ad"])
         self._btn_keep = QPushButton(STRINGS["sf_btn_keep"])
         self._btn_keep.setObjectName("btn_keep")
+        self._btn_keep.setToolTip(STRINGS["tip_sf_keep"])
         self._btn_always_ad = QPushButton(STRINGS["sf_btn_always_ad"])
         self._btn_always_ad.setObjectName("btn_remove")
         self._btn_always_ad.setToolTip(
@@ -679,11 +685,14 @@ class MainWindow(QMainWindow):
         # Action bar (Prev/Next/Clean & Save) — lives inside Single File tab
         action_bar = QHBoxLayout()
         self._btn_prev = QPushButton(STRINGS["sf_btn_prev"])
+        self._btn_prev.setToolTip(STRINGS["tip_sf_prev"])
         self._btn_next = QPushButton(STRINGS["sf_btn_next"])
+        self._btn_next.setToolTip(STRINGS["tip_sf_next"])
         self._lbl_stats = QLabel("")
         self._lbl_stats.setObjectName("file_status")
         self._btn_clean_all = QPushButton(STRINGS["sf_btn_clean_save"])
         self._btn_clean_all.setObjectName("btn_save_green")
+        self._btn_clean_all.setToolTip(STRINGS["tip_sf_clean_save"])
         self._btn_clean_all.setEnabled(False)
         action_bar.addWidget(self._btn_prev)
         action_bar.addWidget(self._btn_next)
@@ -749,10 +758,45 @@ class MainWindow(QMainWindow):
         self._btn_always_ad.clicked.connect(self._always_mark_as_ad)
         self._btn_settings.clicked.connect(self._open_settings)
         self._sf_slider.valueChanged.connect(self._on_sf_threshold_changed)
+
+        # Status bar unification — forward each panel's status to the app bar
+        self._batch_panel.status_updated.connect(self._on_panel_status)
+        self._video_panel.status_updated.connect(self._on_panel_status)
+        self._image_subs_panel.status_updated.connect(self._on_panel_status)
+        self._transcribe_panel.status_updated.connect(self._on_panel_status)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
         # Keyboard shortcuts
         QShortcut(QKeySequence("Delete"), self, self._mark_current_as_ad)
         QShortcut(QKeySequence("Space"),  self, self._keep_current)
         QShortcut(QKeySequence("Ctrl+S"), self, self._save_current)
+
+    # ── Status bar unification ────────────────────────────────────────────
+
+    def _on_panel_status(self, msg: str):
+        """Forward a panel's status message to the app-level bar, but only
+        when that panel's tab is currently active. Messages from background
+        tabs are silently ignored — the bar stays in sync with what the user
+        is looking at. When the user switches tabs, _on_tab_changed picks up
+        the panel's last known status instead."""
+        # Identify which panel fired the signal
+        sender = self.sender()
+        active_widget = self._tabs.currentWidget()
+        if sender is active_widget:
+            self._status.showMessage(msg)
+
+    def _on_tab_changed(self, index: int):
+        """Sync the app-level status bar whenever the user switches tabs."""
+        widget = self._tabs.widget(index)
+        # Single File tab (index 0) manages the status bar directly via
+        # self._status.showMessage(); nothing to do when switching to it.
+        # For the four panels that own internal status labels, read the last
+        # message via get_status() and push it to the app bar.
+        if hasattr(widget, 'get_status'):
+            self._status.showMessage(widget.get_status())
+        elif widget is self._tabs.widget(0):
+            # Switching back to Single File — leave the bar as-is; the last
+            # Single File message is still showing.
+            pass
 
     # ── Settings ─────────────────────────────────────────────────────────────
 

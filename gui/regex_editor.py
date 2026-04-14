@@ -291,6 +291,7 @@ class AddPatternDialog(QDialog):
 
         # ── Test match ─────────────────────────────────────────────────
         self._btn_test = QPushButton(STRINGS["addpattern_btn_test"])
+        self._btn_test.setToolTip(STRINGS["tip_regex_test"])
         self._btn_test.clicked.connect(self._test_match)
         layout.addWidget(self._btn_test)
 
@@ -416,7 +417,9 @@ class RegexEditorPanel(QWidget):
         )
         lbl.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
         self._btn_new_profile = QPushButton(STRINGS["regex_btn_new_profile"])
+        self._btn_new_profile.setToolTip(STRINGS["tip_regex_new_profile"])
         self._btn_reload = QPushButton(STRINGS["regex_btn_reload"])
+        self._btn_reload.setToolTip(STRINGS["tip_regex_reload"])
         top.addWidget(lbl, stretch=1)
         top.addWidget(self._btn_new_profile)
         top.addWidget(self._btn_reload)
@@ -473,6 +476,7 @@ class RegexEditorPanel(QWidget):
 
         self._btn_quick_add = QPushButton(STRINGS["regex_btn_add"])
         self._btn_quick_add.setObjectName("btn_keep")
+        self._btn_quick_add.setToolTip(STRINGS["tip_regex_add"])
 
         add_row.addWidget(self._quick_section)
         add_row.addWidget(self._quick_key)
@@ -487,9 +491,11 @@ class RegexEditorPanel(QWidget):
         self._btn_save = QPushButton(STRINGS["regex_btn_save"])
         self._btn_save.setObjectName("btn_clean_all")
         self._btn_save.setEnabled(False)
+        self._btn_save.setToolTip(STRINGS["tip_regex_save"])
         self._btn_discard = QPushButton(STRINGS["regex_btn_discard"])
         self._btn_discard.setObjectName("btn_remove")
         self._btn_discard.setEnabled(False)
+        self._btn_discard.setToolTip(STRINGS["tip_regex_discard"])
 
         save_row.addWidget(self._lbl_dirty, stretch=1)
         save_row.addWidget(self._btn_discard)

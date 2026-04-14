@@ -4,6 +4,7 @@ optionally clean and remux via MKVToolNix or extract as standalone files.
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -298,16 +299,24 @@ def _video_html(result: VideoScanResult, threshold: int = 3) -> str:
 # ---------------------------------------------------------------------------
 
 class VideoScanWorker(QThread):
-    progress = pyqtSignal(int, int, str)
-    finished = pyqtSignal(list)
+    progress  = pyqtSignal(int, int, str)
+    finished  = pyqtSignal(list)
+    cancelled = pyqtSignal(list)   # partial results collected before stop
 
     def __init__(self, paths):
         super().__init__()
         self.paths = paths
+        self._stop = threading.Event()
+
+    def stop(self):
+        self._stop.set()
 
     def run(self):
         results = []
         for i, path in enumerate(self.paths):
+            if self._stop.is_set():
+                self.cancelled.emit(results)
+                return
             self.progress.emit(i, len(self.paths), path.name)
             try:
                 result = scan_video(path)
@@ -552,7 +561,9 @@ class VideoDropZone(QFrame):
 # ---------------------------------------------------------------------------
 
 class VideoScanPanel(QWidget):
-    open_in_image_subs = pyqtSignal(Path)   # emitted when user clicks "Open in Image Subs"
+    open_in_image_subs = pyqtSignal(Path)
+    status_updated     = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._results:  List[VideoScanResult] = []
@@ -563,6 +574,7 @@ class VideoScanPanel(QWidget):
         self._checked_tracks: Dict = {}
         self._current_result: Optional[VideoScanResult] = None
         self._current_track:  Optional[SubtitleTrack]   = None
+        self._status_text: str = STRINGS["video_status_begin"]
         self._build_ui()
         self._check_tools()
 
@@ -591,10 +603,18 @@ class VideoScanPanel(QWidget):
         # ── Top controls ──────────────────────────────────────────────
         ctrl = QHBoxLayout()
         self._btn_add_folder = QPushButton(STRINGS["video_btn_add_folder"])
+        self._btn_add_folder.setToolTip(STRINGS["tip_video_add_folder"])
         self._btn_clear      = QPushButton(STRINGS["video_btn_clear"])
+        self._btn_clear.setToolTip(STRINGS["tip_video_clear"])
         self._btn_scan       = QPushButton(STRINGS["video_btn_scan"])
         self._btn_scan.setObjectName("btn_clean_all")
         self._btn_scan.setEnabled(False)
+        self._btn_scan.setToolTip(STRINGS["tip_video_scan"])
+
+        self._btn_stop_scan = QPushButton(STRINGS["video_btn_stop_scan"])
+        self._btn_stop_scan.setObjectName("btn_save")
+        self._btn_stop_scan.setVisible(False)
+        self._btn_stop_scan.setToolTip(STRINGS["tip_video_stop_scan"])
 
         self._lbl_folder = QLabel(STRINGS["video_no_folder"])
         self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
@@ -603,6 +623,7 @@ class VideoScanPanel(QWidget):
         ctrl.addWidget(self._btn_clear)
         ctrl.addWidget(self._lbl_folder, stretch=1)
         ctrl.addWidget(self._btn_scan)
+        ctrl.addWidget(self._btn_stop_scan)
 
         # ── Sensitivity slider ────────────────────────────────────────
         thresh_frame = QFrame()
@@ -637,8 +658,6 @@ class VideoScanPanel(QWidget):
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
-        self._lbl_status = QLabel(STRINGS["video_status_begin"])
-        self._lbl_status.setObjectName("file_status")
 
         # ── Drop zone ─────────────────────────────────────────────────
         self._drop_zone = VideoDropZone()
@@ -673,24 +692,13 @@ class VideoScanPanel(QWidget):
         self._btn_remux = QPushButton(STRINGS["video_btn_remux"])
         self._btn_remux.setObjectName("btn_save")
         self._btn_remux.setEnabled(False)
-        self._btn_remux.setToolTip(
-            "Cleans the selected subtitle tracks and rebuilds the video file with\n"
-            "the cleaned tracks replacing the originals.\n\n"
-            "MKV: requires MKVToolNix (mkvmerge).\n"
-            "MP4/M4V: uses ffmpeg (already required for scanning).\n"
-            "A backup file is created unless 'Keep backup' is unchecked."
-        )
+        self._btn_remux.setToolTip(STRINGS["tip_video_remux"])
 
         # "Extract & Save" — pulls subtitle out as standalone file
         self._btn_extract = QPushButton(STRINGS["video_btn_extract"])
         self._btn_extract.setObjectName("btn_keep")
         self._btn_extract.setEnabled(False)
-        self._btn_extract.setToolTip(
-            "Extracts the selected subtitle tracks from the video, cleans them,\n"
-            "and saves them as standalone .srt or .ass files next to the video.\n\n"
-            "Works with any video format. Does not modify the video file.\n"
-            "Most media players will automatically use external subtitle files."
-        )
+        self._btn_extract.setToolTip(STRINGS["tip_video_extract"])
 
         remux_bar.addWidget(self._chk_backup)
         remux_bar.addWidget(self._chk_warnings)
@@ -715,10 +723,7 @@ class VideoScanPanel(QWidget):
         self._btn_open_image_subs = QPushButton(STRINGS["img_btn_open_image_subs"])
         self._btn_open_image_subs.setObjectName("btn_clean_all")
         self._btn_open_image_subs.setVisible(False)
-        self._btn_open_image_subs.setToolTip(
-            "Send this video file to the Image Subs tab to scan "
-            "its image-based subtitle tracks with Tesseract OCR."
-        )
+        self._btn_open_image_subs.setToolTip(STRINGS["tip_video_open_image_subs"])
         self._btn_open_image_subs.clicked.connect(self._open_current_in_image_subs)
 
         self._detail_text = QTextBrowser()
@@ -741,7 +746,6 @@ class VideoScanPanel(QWidget):
         root.addWidget(thresh_frame)
         root.addWidget(self._drop_zone)
         root.addWidget(self._progress)
-        root.addWidget(self._lbl_status)
         root.addWidget(splitter, stretch=1)
 
         # ── Connect ───────────────────────────────────────────────────
@@ -749,12 +753,24 @@ class VideoScanPanel(QWidget):
         self._btn_add_folder.clicked.connect(self._browse_folder)
         self._btn_clear.clicked.connect(self._clear)
         self._btn_scan.clicked.connect(self._scan)
+        self._btn_stop_scan.clicked.connect(self._stop_scan)
         self._btn_remux.clicked.connect(self._remux_selected)
         self._btn_extract.clicked.connect(self._extract_selected)
         self._slider.valueChanged.connect(self._on_threshold_changed)
         self._tree.currentItemChanged.connect(self._on_tree_selection)
         self._tree.itemChanged.connect(self._on_item_checked)
         self._detail_text.anchorClicked.connect(self._on_detail_link)
+
+    # ── Status helper ─────────────────────────────────────────────────────
+
+    def _set_status(self, msg: str):
+        """Emit status to the app-level bar via signal."""
+        self._status_text = msg
+        self.status_updated.emit(msg)
+
+    def get_status(self) -> str:
+        """Return the current status text (used by MainWindow on tab switch)."""
+        return self._status_text
 
     # ── Tool checks ───────────────────────────────────────────────────
 
@@ -811,7 +827,7 @@ class VideoScanPanel(QWidget):
         existing = set(self._queued)
         new = [p for p in paths if p not in existing]
         self._queued.extend(new)
-        self._lbl_status.setText(STRINGS["video_files_queued"].format(n=len(self._queued)))
+        self._set_status(STRINGS["video_files_queued"].format(n=len(self._queued)))
         self._btn_scan.setEnabled(bool(self._queued))
 
     def _clear(self):
@@ -826,7 +842,7 @@ class VideoScanPanel(QWidget):
         self._btn_extract.setEnabled(False)
         self._lbl_selected.setText(STRINGS["video_lbl_selected"])
         self._lbl_folder.setText(STRINGS["video_no_folder"])
-        self._lbl_status.setText(STRINGS["video_status_begin"])
+        self._set_status(STRINGS["video_status_begin"])
         self._btn_scan.setEnabled(False)
 
     # ── Threshold ─────────────────────────────────────────────────────
@@ -909,23 +925,45 @@ class VideoScanPanel(QWidget):
         self._progress.setRange(0, len(self._queued))
         self._progress.setValue(0)
         self._btn_scan.setEnabled(False)
+        self._btn_stop_scan.setVisible(True)
         self._worker = VideoScanWorker(self._queued)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_scan_done)
+        self._worker.cancelled.connect(self._on_scan_cancelled)
         self._worker.start()
+
+    def _stop_scan(self):
+        if self._worker and self._worker.isRunning():
+            self._worker.stop()
+
+    def _on_scan_cancelled(self, results: list):
+        done = len(results)
+        total = len(self._queued)
+        self._progress.setVisible(False)
+        self._btn_stop_scan.setVisible(False)
+        self._btn_scan.setEnabled(True)
+
+        if results:
+            self._results = results
+            self._populate_tree(results)
+
+        self._set_status(
+            STRINGS["video_status_cancelled"].format(done=done, total=total)
+        )
 
     def _on_progress(self, current, total, name):
         self._progress.setValue(current)
-        self._lbl_status.setText(STRINGS["video_status_scanning"].format(current=current, total=total, name=name))
+        self._set_status(STRINGS["video_status_scanning"].format(current=current, total=total, name=name))
 
     def _on_scan_done(self, results):
         self._results = results
         self._progress.setVisible(False)
+        self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
         self._populate_tree(results)
         total_ads = sum(t.ads_at_threshold(self._threshold)
                         for r in results for t in r.tracks)
-        self._lbl_status.setText(
+        self._set_status(
             f"Scan complete — {len(results)} video(s) · "
             f"{total_ads} ad block(s) found in embedded subtitles"
         )

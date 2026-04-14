@@ -12,6 +12,7 @@ Key improvements over v1:
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import List, Optional
 
@@ -69,18 +70,47 @@ def _classify(subtitle: ParsedSubtitle, threshold: int):
 # ---------------------------------------------------------------------------
 
 class BatchWorker(QThread):
-    progress = pyqtSignal(int, int, str)
-    finished = pyqtSignal(object)          # BatchResult
+    progress   = pyqtSignal(int, int, str)
+    finished   = pyqtSignal(object)   # BatchResult (complete)
+    cancelled  = pyqtSignal(object)   # BatchResult (partial, scan was stopped)
 
     def __init__(self, paths: List[Path]):
         super().__init__()
         self.paths = paths
+        self._stop = threading.Event()
+
+    def stop(self):
+        self._stop.set()
 
     def run(self):
-        def cb(i, total, path):
+        import time
+        from core.batch import FileResult, BatchResult
+        from core.subtitle import load_subtitle
+        from core.cleaner import analyze as _analyze
+
+        results = []
+        t0 = time.time()
+        total = len(self.paths)
+
+        for i, path in enumerate(self.paths):
+            if self._stop.is_set():
+                partial = BatchResult(results=results, elapsed=time.time() - t0)
+                self.cancelled.emit(partial)
+                return
             self.progress.emit(i, total, path.name)
-        result = run_batch(self.paths, progress_cb=cb)
-        self.finished.emit(result)
+            fr = FileResult(path=path)
+            try:
+                sub = load_subtitle(path)
+                _analyze(sub)
+                fr.subtitle = sub
+                fr.total_blocks = len(sub.blocks)
+                fr.ad_count = sum(1 for b in sub.blocks if b.is_ad)
+                fr.warning_count = sum(1 for b in sub.blocks if b.is_warning)
+            except Exception as e:
+                fr.error = str(e)
+            results.append(fr)
+
+        self.finished.emit(BatchResult(results=results, elapsed=time.time() - t0))
 
 
 # ---------------------------------------------------------------------------
@@ -109,15 +139,17 @@ class NumericTableItem(QTableWidgetItem):
 
 class BatchPanel(QWidget):
     open_file_requested = pyqtSignal(Path)
+    status_updated      = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._batch_result: Optional[BatchResult] = None
-        self._current_fr = None  # FileResult currently shown in detail, None = full summary
+        self._current_fr = None
         self._worker: Optional[BatchWorker] = None
         self._all_paths: List[Path] = []
         self._root_folder: Optional[Path] = None
         self._threshold: int = load_default_sensitivity()
+        self._status_text: str = STRINGS["batch_status_begin"]
         self._build_ui()
 
     def _build_ui(self):
@@ -135,7 +167,9 @@ class BatchPanel(QWidget):
 
         self._btn_folder = QPushButton(STRINGS["batch_btn_select_folder"])
         self._btn_folder.setObjectName("btn_clean_all")
+        self._btn_folder.setToolTip(STRINGS["tip_batch_select_folder"])
         self._btn_clear = QPushButton(STRINGS["batch_btn_clear"])
+        self._btn_clear.setToolTip(STRINGS["tip_batch_clear"])
 
         folder_row.addWidget(self._btn_folder)
         folder_row.addWidget(self._lbl_folder, stretch=1)
@@ -185,23 +219,28 @@ class BatchPanel(QWidget):
         self._btn_scan = QPushButton(STRINGS["batch_btn_scan_all"])
         self._btn_scan.setObjectName("btn_clean_all")
         self._btn_scan.setEnabled(False)
+        self._btn_scan.setToolTip(STRINGS["tip_batch_scan"])
+
+        self._btn_stop_scan = QPushButton(STRINGS["batch_btn_stop_scan"])
+        self._btn_stop_scan.setObjectName("btn_save")
+        self._btn_stop_scan.setVisible(False)
+        self._btn_stop_scan.setToolTip(STRINGS["tip_batch_stop_scan"])
 
         self._btn_save = QPushButton(STRINGS["batch_btn_clean_save_all"])
         self._btn_save.setObjectName("btn_save")
         self._btn_save.setEnabled(False)
+        self._btn_save.setToolTip(STRINGS["tip_batch_save_all"])
 
         action_row.addWidget(self._chk_warnings)
         action_row.addStretch()
         action_row.addWidget(self._btn_scan)
+        action_row.addWidget(self._btn_stop_scan)
         action_row.addWidget(self._btn_save)
 
         # ── Progress / status ─────────────────────────────────────────────
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
-
-        self._lbl_status = QLabel(STRINGS["batch_status_begin"])
-        self._lbl_status.setObjectName("file_status")
 
         # ── Splitter: file list | detail ──────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -245,6 +284,7 @@ class BatchPanel(QWidget):
 
         self._btn_open_in_review = QPushButton(STRINGS["batch_btn_open_review"])
         self._btn_open_in_review.setEnabled(False)
+        self._btn_open_in_review.setToolTip(STRINGS["tip_batch_open_review"])
         self._btn_full_report = QPushButton(STRINGS["batch_btn_full_report"])
         self._btn_full_report.setEnabled(False)
         self._btn_full_report.setToolTip(STRINGS["batch_tip_full_report"])
@@ -286,19 +326,30 @@ class BatchPanel(QWidget):
         root.addWidget(thresh_frame)
         root.addLayout(action_row)
         root.addWidget(self._progress)
-        root.addWidget(self._lbl_status)
         root.addWidget(splitter, stretch=1)
 
         # ── Connect ───────────────────────────────────────────────────────
         self._btn_folder.clicked.connect(self._select_folder)
         self._btn_clear.clicked.connect(self._clear)
         self._btn_scan.clicked.connect(self._scan)
+        self._btn_stop_scan.clicked.connect(self._stop_scan)
         self._btn_save.clicked.connect(self._save_all)
         self._slider.valueChanged.connect(self._on_threshold_changed)
         self._result_list.itemSelectionChanged.connect(self._on_selection_changed)
         self._btn_open_in_review.clicked.connect(self._open_in_review)
 
         self._btn_full_report.clicked.connect(self._show_full_report)
+
+    # ── Status helper ─────────────────────────────────────────────────────
+
+    def _set_status(self, msg: str):
+        """Emit status to the app-level bar via signal."""
+        self._status_text = msg
+        self.status_updated.emit(msg)
+
+    def get_status(self) -> str:
+        """Return the current status text (used by MainWindow on tab switch)."""
+        return self._status_text
 
     # ── Table helpers ────────────────────────────────────────────────────
 
@@ -398,13 +449,13 @@ class BatchPanel(QWidget):
         paths = collect_files([self._root_folder], recursive=True)
         self._all_paths = paths
         if paths:
-            self._lbl_status.setText(
+            self._set_status(
                 f"Found {len(paths)} subtitle file(s) under {self._root_folder.name}. "
                 f"Click Scan All to analyse."
             )
             self._btn_scan.setEnabled(True)
         else:
-            self._lbl_status.setText(STRINGS["batch_no_files"])
+            self._set_status(STRINGS["batch_no_files"])
             self._btn_scan.setEnabled(False)
 
     def _clear(self):
@@ -418,7 +469,7 @@ class BatchPanel(QWidget):
         self._btn_save.setEnabled(False)
         self._btn_full_report.setEnabled(False)
         self._lbl_folder.setText("No folder selected")
-        self._lbl_status.setText(STRINGS["batch_status_begin"])
+        self._set_status(STRINGS["batch_status_begin"])
 
     # ── Threshold slider ──────────────────────────────────────────────────
 
@@ -462,7 +513,7 @@ class BatchPanel(QWidget):
             1 for r in self._batch_result.results
             if r.subtitle and _classify(r.subtitle, self._threshold)[0] > 0
         )
-        self._lbl_status.setText(
+        self._set_status(
             f"Scan complete — {self._batch_result.total} files · "
             f"{files_with_ads} with ads ({total_ads} blocks) · "
             f"{total_warns} warnings · threshold: rm≥{self._threshold}"
@@ -483,19 +534,47 @@ class BatchPanel(QWidget):
         self._progress.setRange(0, len(self._all_paths))
         self._progress.setValue(0)
         self._btn_scan.setEnabled(False)
+        self._btn_stop_scan.setVisible(True)
 
         self._worker = BatchWorker(self._all_paths)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_scan_done)
+        self._worker.cancelled.connect(self._on_scan_cancelled)
         self._worker.start()
+
+    def _stop_scan(self):
+        if self._worker and self._worker.isRunning():
+            self._worker.stop()
+
+    def _on_scan_cancelled(self, result: BatchResult):
+        done = result.total
+        total = len(self._all_paths)
+        self._progress.setVisible(False)
+        self._btn_stop_scan.setVisible(False)
+        self._btn_scan.setEnabled(True)
+        self._btn_full_report.setEnabled(bool(result.results))
+
+        if result.results:
+            self._batch_result = result
+            self._result_list.setSortingEnabled(False)
+            self._result_list.setRowCount(len(result.results))
+            for row, fr in enumerate(result.results):
+                self._populate_row(row, fr, self._threshold)
+            self._result_list.setSortingEnabled(True)
+            self._report_text.setHtml(self._build_report())
+
+        self._set_status(
+            STRINGS["batch_status_cancelled"].format(done=done, total=total)
+        )
 
     def _on_progress(self, current: int, total: int, name: str):
         self._progress.setValue(current)
-        self._lbl_status.setText(STRINGS["batch_status_scanning"].format(current=current, total=total, name=name))
+        self._set_status(STRINGS["batch_status_scanning"].format(current=current, total=total, name=name))
 
     def _on_scan_done(self, result: BatchResult):
         self._batch_result = result
         self._progress.setVisible(False)
+        self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
         self._btn_full_report.setEnabled(True)
 
@@ -876,7 +955,7 @@ class BatchPanel(QWidget):
 
         for i, (r, remove_blocks) in enumerate(to_clean):
             self._progress.setValue(i)
-            self._lbl_status.setText(STRINGS["batch_saving"].format(i=i+1, total=len(to_clean), name=r.path.name))
+            self._set_status(STRINGS["batch_saving"].format(i=i+1, total=len(to_clean), name=r.path.name))
             QApplication_processEvents()
 
             remove_ids = {id(b) for b in remove_blocks}
@@ -904,7 +983,7 @@ class BatchPanel(QWidget):
             QMessageBox.warning(self, STRINGS["dlg_saves_failed"], "\n".join(errors))
         else:
             saved = len(to_clean)
-            self._lbl_status.setText(STRINGS["batch_done_status"].format(saved=saved, thresh=t))
+            self._set_status(STRINGS["batch_done_status"].format(saved=saved, thresh=t))
             QMessageBox.information(self, STRINGS["dlg_done"], STRINGS["dlg_done_msg"].format(saved=saved))
 
         # Refresh list colours
@@ -918,7 +997,7 @@ class BatchPanel(QWidget):
         self._all_paths = subtitle_paths
         if subtitle_paths:
             self._btn_scan.setEnabled(True)
-            self._lbl_status.setText(STRINGS["batch_files_queued"].format(n=len(subtitle_paths)))
+            self._set_status(STRINGS["batch_files_queued"].format(n=len(subtitle_paths)))
 
 
 def QApplication_processEvents():
