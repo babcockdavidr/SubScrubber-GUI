@@ -1,4 +1,4 @@
-# SubForge — v0.13.0: Stability, Scan Control & Tooltip Audit
+# SubForge — v0.14.0: Performance & Polish
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,14 +10,11 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.13.0 — Stability, Scan Control & Tooltip Audit
-- **Stop Scan button** — Batch and Video Scan both now have a Stop Scan button that appears during an active scan. Clicking it stops the scan immediately and preserves all results collected so far — nothing is lost and no files are corrupted. The Clear button was never designed for this, so Stop Scan fills the gap properly.
-- **Status bar unification** — the status bar at the bottom of the window now reflects the active tab at all times. Previously it only updated on the Single File tab; Batch, Video Scan, Image Subs, and Transcribe all managed their own internal status labels. Now switching tabs syncs the bar to that tab's last message, and all activity updates it live.
-- **Image Subs sensitivity slider now recolors all tracks** — moving the slider previously updated the detail pane for the selected track but left all other track colors in the tree stale. All scanned tracks now recolor correctly at the new threshold when the slider moves.
-- **Language change dialog button translation** — the Yes/No buttons in the restart prompt after changing language were always in the OS language, regardless of what language you had just selected. The dialog now uses SubForge's own translated button labels, so the prompt appears correctly in the newly selected language.
-- **Tooltip audit** — every button in the app now has a tooltip. All tooltip text goes through the translation system and is available in all 14 supported languages.
-- **Startup crash fix (faster-whisper)** — SubForge would crash on launch when faster-whisper was installed, because the `transformers` library it depends on tries to access `sys.stderr` at import time, which is `None` in a windowed application. The availability check now temporarily stubs out the null streams before importing so the check completes cleanly.
-- **14 language packs updated** — all new strings for this release are fully translated.
+### v0.14.0 — Performance & Polish
+- **OCR pipeline performance** — Image Subs scanning is significantly faster. The brightness heuristic in preprocessing now samples 500 random pixels instead of materializing the entire pixel array. The PGS RLE decoder was rewritten using a pre-allocated `bytearray` with a write cursor, eliminating per-pixel Python object overhead. The palette lookup in `build_image()` was replaced with a NumPy vectorized LUT operation. Both the PGS and VOBSUB OCR loops now run in a `ThreadPoolExecutor` (up to 4 workers), and the panel's frame progress signal is throttled to at most one emission per 100ms to prevent UI jank on high frame-count tracks.
+- **Parallel subtitle scanning** — Batch processing and Video Scan now run in thread pools. Batch files are scanned up to 4 at a time. Within Video Scan, all text tracks in a single video are extracted in parallel (up to 4 concurrent ffmpeg processes), and multiple video files are processed 2 at a time to avoid over-saturating disk I/O.
+- **Settings cache** — `settings.json` was previously read from disk and JSON-parsed on every call to resolve tool paths (ffmpeg, ffprobe, mkvmerge, Tesseract). This happened once per subtitle track, from multiple threads simultaneously. A shared in-memory cache in `core/paths.py` now reads the file once and serves all subsequent requests from memory, invalidating only on write.
+- **Tesseract OCR character corrections** — a post-processing step corrects common Tesseract misreads in subtitle OCR output. Music note substitutions corrected: `~`, `¢`, `£`, `#`, `Py`, `JJ`, `fF`, `ff`, `IS`, `Ss`, `J`, `f`, and `I` at line end are all mapped back to ♪ in the appropriate context. Dialogue character fixes: `|` used as capital `I`, `[` before lowercase (e.g. `['m` → `I'm`), and `/` before lowercase (e.g. `/ma` → `I'ma`) are all corrected.
 
 ---
 
@@ -426,4 +423,4 @@ The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.13.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.14.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

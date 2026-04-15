@@ -1,30 +1,19 @@
 SubForge — Development Roadmap
-Last updated: v0.13.0 (complete) — next: v1.0.0
+Last updated: v0.14.0 (complete) — next: v1.0.0
 ================================================================================
 
-Upcoming Release: 1.0.0 — Accessibility, Polish & Release
-  - Multi-thread support for faster scanning — all tabs (Batch, Video Scan,
-    Image Subs) should process files/tracks in parallel using
-    concurrent.futures.ThreadPoolExecutor. Default thread count = CPU count,
-    capped at 4. Progress reporting preserved via existing signal/slot pattern.
-  - Uninstaller cleans up %APPDATA%\SubForge\ — this directory now holds
-    Whisper models (potentially several GB) and the crash log. The uninstaller
-    should prompt the user and offer to delete it, rather than leaving it
-    silently behind. Implement via [UninstallDelete] in the .iss file with
-    a user prompt, or a [Code] section for conditional deletion.
+Upcoming Release: v1.0.0 — Accessibility, Polish & Release
+  - Rename the Video Scan tab to "Embedded Subs" for clarity, translate into all languages, update the README
+  - Inline editing in the "Embedded Subs" tab and the "Image Subs" tab prior to saving as SRT or Remux, update the README
+  - SUBTITLE FORMAT CONVERSION
+    - SRT ↔ ASS ↔ VTT conversion within the app
+    - Batch format conversion across a library folder
+  - The "About" tab tagline update to "Clean, scan, and create subtitle files — all in one place, all on your machine." This will need translating to all languages via strings.
   - Light theme and high contrast theme (toggle in Settings)
   - Font size setting (small/medium/large)
   - Keyboard navigation audit — every action reachable without mouse
   - Screen reader compatibility — setAccessibleName/setAccessibleDescription
     on all major widgets (Windows Narrator, macOS VoiceOver)
-  - Windows installer appears behind other windows on launch — Inno Setup
-    foreground focus issue. SetupMutex and WindowVisible both tried without
-    success. May require a post-install launcher workaround.
-  - Tesseract reads music note symbols (♪) as "J" — Tesseract has no glyph
-    for ♪ in its training data and substitutes the nearest Latin character.
-    Options: post-process OCR output replacing isolated "J" near known music
-    context with ♪, or use a custom Tesseract training set. Low priority.
-  - Additional translations — French, Dutch (detection profiles already exist)
   - GitHub Pages documentation site from README with tab screenshots
   - File association on macOS
   - Full test pass: Windows, macOS, Linux
@@ -38,6 +27,8 @@ Upcoming Release: 1.0.0 — Accessibility, Polish & Release
 
 POST-1.0 — FUTURE FEATURES
 
+  IMPROVEMENTS TO BATCH SCANNING AND MULTITHREADING ON ALL TABS
+
   MACOS AND LINUX BINARIES
   - Dropped from v0.9.0 scope — Windows installer alone was complex enough
     to validate. Source code remains cross-platform.
@@ -48,12 +39,7 @@ POST-1.0 — FUTURE FEATURES
 --------------------------------------------------------------------------------
 These are real planned features, not wishlist items. Priority order TBD.
 
-  SUBTITLE FORMAT CONVERSION
-  - SRT ↔ ASS ↔ VTT conversion within the app
-  - Batch format conversion across a library folder
 
-  ADDITIONAL TRANSLATIONS
-  - Community contribution system via GitHub for additional languages beyond French/Dutch
 
   ANDROID
   - BeeWare/Briefcase port
@@ -70,16 +56,9 @@ These are real planned features, not wishlist items. Priority order TBD.
 
 DECISIONS & STANDING RULES
 --------------------------------------------------------------------------------
-  - Check for Updates stays in status bar. Opt-in and visible. Non-negotiable.
-  - Settings is a dialog opened from toolbar button, NOT a tab.
-  - Settings button lives on far right of toolbar (⚙ Settings).
-  - No emojis on buttons except the gear icon on Settings.
-  - Sensitivity slider: no recommendations made — user-judgment based. Default configurable in Settings.
   - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0 etc.)
-  - Remux supports MKV (mkvmerge) and MP4/M4V (ffmpeg). No mkvmerge for MP4.
   - Extract & Save filename: [video stem].[lang].[ext] e.g. Movie.eng.srt
     SDH tracks: Movie.eng.sdh.srt
-  - File queue in Single File shows color only, no stale count badges.
   - SubForge is an accessibility tool — SDH removal and any feature that
     degrades the HoH experience must carry a visible warning and must never
     be enabled by default. Always default to the HoH-friendly option.
@@ -87,4 +66,3 @@ DECISIONS & STANDING RULES
     Encoder credits in track titles serve no user and actively hurt
     HoH users navigating subtitle menus.
   - Cleaning options are global (settings.json), not per-tab.
-  - mkvmerge path lives in Settings > Paths, not in Video Scan tab.

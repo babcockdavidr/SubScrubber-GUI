@@ -1,5 +1,14 @@
 # SubForge — Release Notes
 
+## v0.14.0 — Performance & Polish
+
+- **OCR pipeline performance** — Image Subs scanning is significantly faster. The brightness heuristic in preprocessing now samples 500 random pixels instead of materializing the entire pixel array. The PGS RLE decoder was rewritten using a pre-allocated `bytearray` with a write cursor, eliminating per-pixel Python object overhead. The palette lookup in `build_image()` was replaced with a NumPy vectorized LUT operation. Both the PGS and VOBSUB OCR loops now run in a `ThreadPoolExecutor` (up to 4 workers), and the panel's frame progress signal is throttled to at most one emission per 100ms to prevent UI jank on high frame-count tracks.
+- **Parallel subtitle scanning** — Batch processing and Video Scan now run in thread pools. Batch files are scanned up to 4 at a time. Within Video Scan, all text tracks in a single video are extracted in parallel (up to 4 concurrent ffmpeg processes), and multiple video files are processed 2 at a time to avoid over-saturating disk I/O.
+- **Settings cache** — `settings.json` was previously read from disk and JSON-parsed on every call to resolve tool paths (ffmpeg, ffprobe, mkvmerge, Tesseract). This happened once per subtitle track, from multiple threads simultaneously. A shared in-memory cache in `core/paths.py` now reads the file once and serves all subsequent requests from memory, invalidating only on write.
+- **Tesseract OCR character corrections** — a post-processing step corrects common Tesseract misreads in subtitle OCR output. Music note substitutions corrected: `~`, `¢`, `£`, `#`, `Py`, `JJ`, `fF`, `ff`, `IS`, `Ss`, `J`, `f`, and `I` at line end are all mapped back to ♪ in the appropriate context. Dialogue character fixes: `|` used as capital `I`, `[` before lowercase (e.g. `['m` → `I'm`), and `/` before lowercase (e.g. `/ma` → `I'ma`) are all corrected.
+
+---
+
 ## v0.13.0 — Stability, Scan Control & Tooltip Audit
 
 - **Stop Scan button** — Batch and Video Scan both now have a Stop Scan button that appears during an active scan. Clicking it stops the scan immediately and preserves all results collected so far — nothing is lost and no files are corrupted. The Clear button was never designed for this, so Stop Scan fills the gap properly.
