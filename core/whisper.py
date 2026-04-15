@@ -38,23 +38,7 @@ _SUBPROCESS_FLAGS: dict = (
 # Settings persistence
 # ---------------------------------------------------------------------------
 
-from .paths import SETTINGS_FILE as _SETTINGS_FILE, USER_DIR
-
-
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+from .paths import load_settings as _load_settings, save_settings as _save_settings, USER_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -73,14 +57,14 @@ def get_model_dir() -> Path:
 
 
 def set_model_dir(path: str) -> None:
-    s = _load_settings()
+    s = dict(_load_settings())
     s["whisper_model_dir"] = path
     _save_settings(s)
 
 
 def clear_model_dir() -> None:
     """Remove any custom model directory, reverting to the default location."""
-    s = _load_settings()
+    s = dict(_load_settings())
     s.pop("whisper_model_dir", None)
     _save_settings(s)
 

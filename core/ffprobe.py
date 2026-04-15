@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -31,23 +32,7 @@ _SUBPROCESS_FLAGS: dict = (
 # Settings persistence  (ffmpeg / ffprobe paths)
 # ---------------------------------------------------------------------------
 
-from .paths import SETTINGS_FILE as _SETTINGS_FILE
-
-
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+from .paths import load_settings as _load_settings, save_settings as _save_settings
 
 
 def get_ffmpeg_path() -> Optional[str]:
@@ -58,7 +43,7 @@ def get_ffmpeg_path() -> Optional[str]:
 
 
 def set_ffmpeg_path(path: str) -> None:
-    s = _load_settings()
+    s = dict(_load_settings())
     s["ffmpeg_path"] = path
     _save_settings(s)
 
@@ -71,7 +56,7 @@ def get_ffprobe_path() -> Optional[str]:
 
 
 def set_ffprobe_path(path: str) -> None:
-    s = _load_settings()
+    s = dict(_load_settings())
     s["ffprobe_path"] = path
     _save_settings(s)
 
@@ -423,9 +408,16 @@ def _scan_video_inner(path: Path, result: VideoScanResult) -> VideoScanResult:
 
     result.tracks = tracks
 
-    for track in tracks:
-        if track.is_text:
-            extract_and_scan_track(path, track)
+    # Extract and scan all text tracks in parallel — each spawns its own ffmpeg
+    # subprocess and writes to its own tempdir, so there is no shared state.
+    # Track objects are modified in-place; the thread pool waits for all to finish
+    # before returning so result.tracks is fully populated on exit.
+    text_tracks = [t for t in tracks if t.is_text]
+    if text_tracks:
+        n_workers = min(4, len(text_tracks))
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = [pool.submit(extract_and_scan_track, path, t) for t in text_tracks]
+            wait(futures)  # block until all tracks done; errors captured inside each track
 
     return result
 

@@ -33,30 +33,12 @@ from .cleaner import clean as cleaner_clean
 # Settings persistence  (stores mkvmerge path if not on system PATH)
 # ---------------------------------------------------------------------------
 
-from .paths import SETTINGS_FILE as _SETTINGS_FILE
+from .paths import load_settings as _load_settings, save_settings as _save_settings
 
 import sys as _sys
 _SUBPROCESS_FLAGS: dict = (
     {"creationflags": 0x08000000} if _sys.platform == "win32" else {}
 )
-
-
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(
-            json.dumps(data, indent=2), encoding="utf-8"
-        )
-    except Exception:
-        pass
 
 
 def get_mkvmerge_path() -> Optional[str]:
@@ -85,9 +67,9 @@ def get_mkvmerge_path() -> Optional[str]:
 
 def set_mkvmerge_path(path: str) -> None:
     """Persist a custom mkvmerge path to settings.json."""
-    settings = _load_settings()
-    settings["mkvmerge_path"] = path
-    _save_settings(settings)
+    s = dict(_load_settings())
+    s["mkvmerge_path"] = path
+    _save_settings(s)
 
 
 def mkvmerge_available() -> bool:

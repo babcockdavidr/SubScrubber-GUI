@@ -24,6 +24,8 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -37,23 +39,7 @@ _SUBPROCESS_FLAGS: dict = (
 # Settings persistence
 # ---------------------------------------------------------------------------
 
-from .paths import SETTINGS_FILE as _SETTINGS_FILE
-
-
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+from .paths import load_settings as _load_settings, save_settings as _save_settings
 
 
 # ---------------------------------------------------------------------------
@@ -89,9 +75,9 @@ def get_tesseract_path() -> Optional[str]:
 
 def set_tesseract_path(path: str) -> None:
     """Persist a custom tesseract path to settings.json."""
-    settings = _load_settings()
-    settings["tesseract_path"] = path
-    _save_settings(settings)
+    s = dict(_load_settings())
+    s["tesseract_path"] = path
+    _save_settings(s)
 
 
 def tesseract_available() -> bool:
@@ -304,15 +290,28 @@ def _parse_sup(sup_path: Path) -> List[Tuple[int, int, object]]:
         if not current_ods_data or current_ods_w == 0 or current_ods_h == 0:
             return None
         try:
+            import numpy as np
             pixels = _decode_pgs_rle(current_ods_data, current_ods_w, current_ods_h)
-            img = Image.new("RGBA", (current_ods_w, current_ods_h))
-            img_data = []
-            for idx in pixels:
-                r, g, b, a = current_palette.get(idx, (0, 0, 0, 0))
-                img_data.append((r, g, b, a))
-            img.putdata(img_data)
-            # Return full image — let preprocessing handle cropping
-            return img
+            # Build a 256x4 lookup table (RGBA) from the current palette dict.
+            # Unmapped indices default to (0,0,0,0) — transparent black.
+            lut = np.zeros((256, 4), dtype=np.uint8)
+            for pal_idx, (r, g, b, a) in current_palette.items():
+                lut[pal_idx] = (r, g, b, a)
+            # pixels is a bytearray of palette indices — treat as uint8 array
+            # and do a single vectorized lookup, avoiding any Python-level loop.
+            indices = np.frombuffer(pixels, dtype=np.uint8)
+            rgba = lut[indices].reshape(current_ods_h, current_ods_w, 4)
+            return Image.fromarray(rgba, mode="RGBA")
+        except ImportError:
+            # NumPy not available — fall back to pure-Python palette loop
+            try:
+                pixels = _decode_pgs_rle(current_ods_data, current_ods_w, current_ods_h)
+                img = Image.new("RGBA", (current_ods_w, current_ods_h))
+                img_data = [current_palette.get(idx, (0, 0, 0, 0)) for idx in pixels]
+                img.putdata(img_data)
+                return img
+            except Exception:
+                return None
         except Exception:
             return None
 
@@ -400,9 +399,15 @@ def _parse_sup(sup_path: Path) -> List[Tuple[int, int, object]]:
     return display_sets
 
 
-def _decode_pgs_rle(data: bytes, width: int, height: int) -> List[int]:
+def _decode_pgs_rle(data: bytes, width: int, height: int) -> bytearray:
     """
-    Decode PGS RLE compressed bitmap. Returns flat list of palette indices.
+    Decode PGS RLE compressed bitmap. Returns flat bytearray of palette indices.
+
+    Using bytearray instead of a list of ints avoids Python object overhead on
+    every element — for a 1920x1080 frame this cuts memory allocation by ~8x
+    and removes the final list-to-slice copy. The bytearray is pre-allocated
+    and zero-filled, so index-0 runs and end-of-line padding need only advance
+    the write cursor rather than writing anything.
 
     PGS RLE encoding:
       non-zero byte        → single pixel of that palette index
@@ -412,47 +417,54 @@ def _decode_pgs_rle(data: bytes, width: int, height: int) -> List[int]:
       0x00 b2 (b2 & 0xC0 == 0x80) → (b2 & 0x3F) pixels of index (next byte)
       0x00 b2 (b2 & 0xC0 == 0xC0) → ((b2&0x3F)<<8 | next) pixels of index (next byte)
     """
-    pixels = []
+    total = width * height
+    pixels = bytearray(total)  # pre-allocated, zero-filled — padding is free
+    out = 0  # write cursor
     i = 0
-    while i < len(data) and len(pixels) < width * height:
+    n = len(data)
+
+    while i < n and out < total:
         b = data[i]; i += 1
         if b != 0:
             # Single pixel
-            pixels.append(b)
+            pixels[out] = b
+            out += 1
         else:
-            if i >= len(data):
+            if i >= n:
                 break
             b2 = data[i]; i += 1
             if b2 == 0:
-                # End of line — pad current line to width
-                col = len(pixels) % width
+                # End of line — advance cursor to next row boundary; zeros already there
+                col = out % width
                 if col > 0:
-                    pixels.extend([0] * (width - col))
+                    out += width - col
             elif (b2 & 0xC0) == 0x00:
-                # Short run of index 0
-                count = b2 & 0x3F
-                pixels.extend([0] * count)
+                # Short run of index 0 — just advance cursor
+                count = min(b2 & 0x3F, total - out)
+                out += count
             elif (b2 & 0xC0) == 0x40:
                 # Long run of index 0
-                if i >= len(data): break
-                count = ((b2 & 0x3F) << 8) | data[i]; i += 1
-                pixels.extend([0] * count)
+                if i >= n: break
+                count = min(((b2 & 0x3F) << 8) | data[i], total - out); i += 1
+                out += count
             elif (b2 & 0xC0) == 0x80:
                 # Short run of color
                 count = b2 & 0x3F
-                if i >= len(data): break
+                if i >= n: break
                 color = data[i]; i += 1
-                pixels.extend([color] * count)
+                end = min(out + count, total)
+                pixels[out:end] = bytes([color]) * (end - out)
+                out = end
             else:  # 0xC0
                 # Long run of color
-                if i + 1 >= len(data): break
+                if i + 1 >= n: break
                 count = ((b2 & 0x3F) << 8) | data[i]; i += 1
                 color = data[i]; i += 1
-                pixels.extend([color] * count)
+                end = min(out + count, total)
+                pixels[out:end] = bytes([color]) * (end - out)
+                out = end
 
-    if len(pixels) < width * height:
-        pixels.extend([0] * (width * height - len(pixels)))
-    return pixels[:width * height]
+    return pixels
 
 
 def _is_pgs(codec: str) -> bool:
@@ -492,6 +504,121 @@ def _iso_to_tesseract_lang(iso: str) -> str:
     return _MAP.get(iso.lower(), "eng")
 
 
+def _fix_music_notes(text: str) -> str:
+    """
+    Tesseract has no glyph for ♪ and substitutes visually similar characters.
+    Known substitutions observed in practice:
+
+      ♪  →  J, JS, Jf, JJ          (hook of note misread as J variants)
+      ♪  →  f, ff, fF               (curved top misread as f variants)
+      ♪  →  ~                       (tilde — common for opening note)
+      ♪  →  ¢                       (cent sign — visually similar curve)
+      ♪  →  £                       (pound sign — common closing note)
+      ♪  →  #                       (hash — closing note artifact)
+      ♪  →  Ss, IS                  (serif noise artifacts)
+      ♪  →  Py                      (whole-line substitution — standalone note)
+      ♪  →  I  (at line end)        (closing note reads as capital I)
+
+    Strategy: tokens that are unambiguously ♪ substitutes in any context
+    (~, ¢, £, #, Py) are always replaced when isolated. Tokens that could be
+    real characters (J, f, I, etc.) are only replaced at line boundaries unless
+    a real ♪ already exists in the block.
+    """
+    import re
+
+    if not text:
+        return text
+
+    # Tokens that are unambiguously ♪ in any isolated position —
+    # none of these appear as real words in subtitle dialogue.
+    _ALWAYS_NOTE = ("Py", "JJ", "fF", "ff", "JS", "Jf", "IS", "Ss", "¢", "£", "~", "#")
+    _ALWAYS_PAT = re.compile(
+        r'(?<!\w)(' + "|".join(re.escape(t) for t in _ALWAYS_NOTE) + r')(?!\w)'
+    )
+
+    # Tokens that are ambiguous — only replace at line boundaries or when
+    # a real ♪ already exists in the block (music context confirmed).
+    # "I" at line-end is a closing note; "J" and "f" are common substitutions.
+    _AMBIG_TOKENS = ("J", "f", "I")
+    _AMBIG_PAT = re.compile(
+        r'(?<!\w)(' + "|".join(re.escape(t) for t in _AMBIG_TOKENS) + r')(?!\w)'
+    )
+    _AMBIG_BOUNDARY_PAT = re.compile(
+        r'^(' + "|".join(re.escape(t) for t in _AMBIG_TOKENS) + r')(?!\w)'
+        r'|'
+        r'(?<!\w)(' + "|".join(re.escape(t) for t in _AMBIG_TOKENS) + r')$'
+    )
+
+    has_real_note = "♪" in text
+
+    def _replace_line(line: str) -> str:
+        # Always-note tokens replaced unconditionally
+        line = _ALWAYS_PAT.sub("♪", line)
+        # Ambiguous tokens: freely if real ♪ present, boundary-only otherwise
+        if has_real_note:
+            line = _AMBIG_PAT.sub("♪", line)
+        else:
+            line = _AMBIG_BOUNDARY_PAT.sub("♪", line)
+        return line
+
+    # Re-check for real note after always-replacements (Py etc. may have added ♪)
+    first_pass = "\n".join(_replace_line(l) for l in text.split("\n"))
+    if not has_real_note and "♪" in first_pass:
+        # A previously-unambiguous substitution introduced ♪ — run ambiguous
+        # replacements again now that we have music context
+        has_real_note = True
+        return "\n".join(_replace_line(l) for l in first_pass.split("\n"))
+    return first_pass
+
+
+def _fix_ocr_chars(text: str) -> str:
+    """
+    Fix common single-character OCR misreads that are not music notes.
+
+    | → I  (pipe misread as capital I in dialogue)
+        Rule: replace | when surrounded by word characters or spaces on either
+        side — i.e. when it appears mid-sentence or at the start of a word.
+        Do NOT replace | when it is the only content on a line that looks like
+        a bracketed annotation boundary (handled separately by SRT parsers).
+
+    [ → I  (open bracket misread as capital I at word start)
+        Rule: only when followed immediately by a lowercase letter or apostrophe,
+        indicating it's a word start, not an annotation like [APPLAUSE].
+
+    / → I  (slash misread as capital I — common in "I'm", "I'ma")
+        Rule: only when at the very start of a word followed by a lowercase
+        letter or apostrophe (e.g. /ma → I'ma, /t → It).
+    """
+    import re
+
+    if not text:
+        return text
+
+    lines = []
+    for line in text.split("\n"):
+        # | → I: pipe surrounded by word chars or at start of word before letters
+        # Covers: "| know", "| said", "May | have", "| dont"
+        # Avoids: "|" alone on a line (rare annotation artifact — leave for parser)
+        line = re.sub(r'(?<=\s)\|(?=\w)', "I", line)   # space-pipe-word → space-I-word
+        line = re.sub(r'(?<=\w)\|(?=\s)', "I", line)   # word-pipe-space → word-I-space  (rare)
+        line = re.sub(r'^\|(?=\w)', "I", line)          # pipe at line start before word
+        line = re.sub(r'(?<=\s)\|$', "I", line)         # pipe at line end after space
+        line = re.sub(r'^\|$', "I", line)               # lone pipe on a line
+
+        # [ → I: bracket at word start before lowercase or apostrophe
+        # Covers: ['m-a → I'm-a
+        # Avoids: [APPLAUSE], [MUSIC PLAYING] — uppercase after bracket = annotation
+        line = re.sub(r'\[(?=[a-z\'])', "I", line)
+
+        # / → I: slash at word start before lowercase or apostrophe
+        # Covers: /ma → I'ma, /t → It
+        line = re.sub(r'(?<!\w)/(?=[a-z\'])', "I", line)
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
 def _preprocess_subtitle_image(img: object) -> object:
     """
     Preprocess a subtitle bitmap for Tesseract.
@@ -503,16 +630,36 @@ def _preprocess_subtitle_image(img: object) -> object:
          → composite onto white → black text on white (ready for Tesseract)
     """
     from PIL import Image, ImageOps
+    import random
 
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
-    # Determine if text is defined by alpha only (all pixels near-black RGB)
-    # Sample the non-transparent pixels to check their RGB values
-    pixels = list(img.getdata())
-    visible = [(r, g, b, a) for r, g, b, a in pixels if a > 32]
-    if visible:
-        avg_brightness = sum(r + g + b for r, g, b, a in visible) / (len(visible) * 3)
+    # Determine if text is defined by alpha only (all pixels near-black RGB).
+    # Sample up to 500 random pixel positions rather than materializing the
+    # entire pixel array — for a 1920x1080 frame that avoids allocating ~2M
+    # tuples in Python just for a brightness heuristic.
+    w_img, h_img = img.size
+    total_pixels = w_img * h_img
+    r_ch, g_ch, b_ch, a_ch = img.split()
+    r_data = r_ch.tobytes()
+    g_data = g_ch.tobytes()
+    b_data = b_ch.tobytes()
+    a_data = a_ch.tobytes()
+
+    sample_size = min(500, total_pixels)
+    indices = random.sample(range(total_pixels), sample_size) if total_pixels > sample_size else range(total_pixels)
+
+    brightness_sum = 0
+    visible_count = 0
+    for idx in indices:
+        a = a_data[idx]
+        if a > 32:
+            brightness_sum += r_data[idx] + g_data[idx] + b_data[idx]
+            visible_count += 1
+
+    if visible_count:
+        avg_brightness = brightness_sum / (visible_count * 3)
         alpha_only = avg_brightness < 30  # all visible pixels are near-black
     else:
         alpha_only = False
@@ -582,26 +729,44 @@ def ocr_frames(
 
     pytesseract.pytesseract.tesseract_cmd = tess_path
     tess_lang = _iso_to_tesseract_lang(lang)
-
-    results: List[str] = []
     total = len(frames)
     tess_config = "--psm 6 --oem 1"
     _tess_garbage = {"[PIL]", "[PIL] ", "[pil]", "", ".", ",", "-", "--"}
 
-    for i, frame_path in enumerate(frames):
-        if progress_cb and i % 10 == 0:
-            progress_cb(f"OCR: frame {i + 1} of {total}…")
+    results_map: dict = {}  # index -> text
+    done_count = 0
+    done_lock = threading.Lock()
+
+    def _ocr_one_frame(i_path):
+        i, frame_path = i_path
         try:
             img = Image.open(frame_path)
             img = _preprocess_subtitle_image(img)
             text = pytesseract.image_to_string(img, lang=tess_lang, config=tess_config).strip()
-            results.append(text if text not in _tess_garbage else "")
+            text = _fix_music_notes(text)
+            text = _fix_ocr_chars(text)
+            return i, text if text not in _tess_garbage else ""
         except Exception:
-            results.append("")
-        if frame_cb:
-            frame_cb(i + 1, total)
+            return i, ""
 
-    return results
+    n_workers = min(4, total)
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(_ocr_one_frame, (i, fp)): i
+            for i, fp in enumerate(frames)
+        }
+        for fut in as_completed(futures):
+            i, text = fut.result()
+            results_map[i] = text
+            with done_lock:
+                done_count += 1
+                count_snap = done_count
+            if frame_cb:
+                frame_cb(count_snap, total)
+            if progress_cb and count_snap % 10 == 0:
+                progress_cb(f"OCR: {count_snap} of {total} frames done…")
+
+    return [results_map.get(i, "") for i in range(total)]
 
 
 # ---------------------------------------------------------------------------
@@ -884,18 +1049,51 @@ def _ocr_track_pgs(
             progress_cb(f"Running OCR on {len(display_sets)} subtitle frames…")
 
         total = len(display_sets)
-        srt_lines: List[str] = []
-        idx = 1
         tess_config = "--psm 6 --oem 1"
-        # Tesseract garbage outputs to filter out
         _tess_garbage = {"[PIL]", "[PIL] ", "[pil]", "", ".", ",", "-", "--"}
 
-        for i, (start_ms, end_ms, img) in enumerate(display_sets):
+        # OCR each frame in a thread pool — Tesseract releases the GIL during
+        # its C-level processing, so multiple frames can be OCR'd concurrently.
+        # Results dict keyed by original index so we can reassemble in order.
+        done_count = 0
+        done_lock = threading.Lock()
+        results: dict = {}  # i -> text
+
+        def _ocr_one(i_start_end_img):
+            i, start_ms, end_ms, img = i_start_end_img
             try:
-                img = _preprocess_subtitle_image(img)
-                text = pytesseract.image_to_string(img, lang=tess_lang, config=tess_config).strip()
+                processed = _preprocess_subtitle_image(img)
+                text = pytesseract.image_to_string(
+                    processed, lang=tess_lang, config=tess_config
+                ).strip()
+                text = _fix_music_notes(text)
+                text = _fix_ocr_chars(text)
             except Exception:
                 text = ""
+            return i, start_ms, end_ms, text
+
+        n_workers = min(4, total)
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(_ocr_one, (i, start_ms, end_ms, img)): i
+                for i, (start_ms, end_ms, img) in enumerate(display_sets)
+            }
+            for fut in as_completed(futures):
+                i, start_ms, end_ms, text = fut.result()
+                results[i] = (start_ms, end_ms, text)
+                with done_lock:
+                    done_count += 1
+                    count_snap = done_count
+                if frame_cb:
+                    frame_cb(count_snap, total)
+                if progress_cb and count_snap % 20 == 0:
+                    progress_cb(f"OCR: {count_snap} of {total} frames done…")
+
+        # Reassemble in original order
+        srt_lines: List[str] = []
+        idx = 1
+        for i in range(total):
+            start_ms, end_ms, text = results.get(i, (0, 0, ""))
             if text and text not in _tess_garbage:
                 srt_lines.append(str(idx))
                 srt_lines.append(
@@ -904,10 +1102,6 @@ def _ocr_track_pgs(
                 srt_lines.append(text)
                 srt_lines.append("")
                 idx += 1
-            if frame_cb:
-                frame_cb(i + 1, total)
-            if progress_cb and i % 20 == 0:
-                progress_cb(f"OCR: frame {i+1} of {total}…")
 
     _finish_ocr(track, srt_lines, progress_cb)
 

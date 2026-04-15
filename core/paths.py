@@ -62,6 +62,60 @@ USER_PROFILES_DIR: Path  = USER_DIR / "regex_profiles" / "default"
 CHANGELOG_FILE: Path     = BASE_DIR / "CHANGELOG.md"
 
 
+# ---------------------------------------------------------------------------
+# Shared settings cache
+# ---------------------------------------------------------------------------
+# settings.json is a tiny file that never changes during a scan session.
+# Reading and JSON-parsing it on every subprocess call (once per track, per
+# file, from multiple threads) was the primary bottleneck in Video Scan.
+# The cache is populated on first access and invalidated only when a write
+# actually happens. Thread-safe: dict assignment is atomic in CPython and
+# the cache is only ever replaced wholesale, never mutated in-place.
+
+import json as _json
+import threading as _threading
+
+_settings_cache: dict | None = None
+_settings_lock = _threading.Lock()
+
+
+def load_settings() -> dict:
+    """Return settings dict, reading from disk only on first call or after a write."""
+    global _settings_cache
+    if _settings_cache is not None:
+        return _settings_cache
+    with _settings_lock:
+        # Double-checked locking: another thread may have populated while we waited
+        if _settings_cache is not None:
+            return _settings_cache
+        try:
+            if SETTINGS_FILE.exists():
+                _settings_cache = _json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            else:
+                _settings_cache = {}
+        except Exception:
+            _settings_cache = {}
+        return _settings_cache
+
+
+def save_settings(data: dict) -> None:
+    """Write settings to disk and update the cache atomically."""
+    global _settings_cache
+    try:
+        SETTINGS_FILE.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+        with _settings_lock:
+            _settings_cache = dict(data)  # replace cache with fresh copy
+    except Exception:
+        pass
+
+
+def invalidate_settings_cache() -> None:
+    """Force the next load_settings() call to re-read from disk."""
+    global _settings_cache
+    with _settings_lock:
+        _settings_cache = None
+
+
 def list_profile_dirs() -> list:
     """Return all profile dirs that exist, deduplicated."""
     seen = set()
