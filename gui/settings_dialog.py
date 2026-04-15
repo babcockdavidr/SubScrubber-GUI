@@ -30,27 +30,13 @@ from core.whisper import get_model_dir, set_model_dir, clear_model_dir
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .strings import STRINGS
 
-from core.paths import SETTINGS_FILE as _SETTINGS_FILE
+from core.paths import load_settings as _load_settings, save_settings as _save_settings
 
 
 # ---------------------------------------------------------------------------
 # Persistence helpers
 # ---------------------------------------------------------------------------
 
-def _load_settings() -> dict:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
 
 
 def load_default_sensitivity() -> int:
@@ -60,7 +46,7 @@ def load_default_sensitivity() -> int:
 
 def save_default_sensitivity(value: int) -> None:
     """Persist default sensitivity to settings.json."""
-    s = _load_settings()
+    s = dict(_load_settings())
     s["default_sensitivity"] = value
     _save_settings(s)
 
@@ -72,7 +58,7 @@ def load_language() -> str:
 
 def save_language(lang_code: str) -> None:
     """Persist language code to settings.json."""
-    s = _load_settings()
+    s = dict(_load_settings())
     s["language"] = lang_code
     _save_settings(s)
 
@@ -88,7 +74,7 @@ def detect_and_save_language() -> str:
     Auto-detect OS locale on first launch and save it if no language is set.
     Returns the language code that was set (existing or newly detected).
     """
-    s = _load_settings()
+    s = dict(_load_settings())
     if "language" in s:
         return s["language"]  # already set — don't override
 
@@ -128,7 +114,7 @@ def load_cleaning_options() -> CleaningOptions:
 
 def save_cleaning_options(opts: CleaningOptions) -> None:
     """Persist CleaningOptions to settings.json."""
-    s = _load_settings()
+    s = dict(_load_settings())
     s["cleaning_options"] = {
         "remove_music_cues": opts.remove_music_cues,
         "remove_sdh_annotations": opts.remove_sdh_annotations,
@@ -1039,7 +1025,7 @@ def load_session() -> dict:
 
 def save_session(last_batch_folder: str, last_video_folder: str, window_geometry: str) -> None:
     """Persist session state to settings.json."""
-    data = _load_settings()
+    data = dict(_load_settings())
     data["last_batch_folder"] = last_batch_folder
     data["last_video_folder"] = last_video_folder
     data["window_geometry"]   = window_geometry

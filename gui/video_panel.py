@@ -312,20 +312,53 @@ class VideoScanWorker(QThread):
         self._stop.set()
 
     def run(self):
-        results = []
-        for i, path in enumerate(self.paths):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from core.ffprobe import VideoScanResult
+
+        total = len(self.paths)
+        results_map: dict = {}  # original index -> VideoScanResult
+        done_count = 0
+        done_lock = threading.Lock()
+
+        def _scan_one(i_path):
+            i, path = i_path
             if self._stop.is_set():
-                self.cancelled.emit(results)
-                return
-            self.progress.emit(i, len(self.paths), path.name)
+                return i, None
             try:
                 result = scan_video(path)
             except Exception as e:
-                from core.ffprobe import VideoScanResult
                 result = VideoScanResult(path=path)
                 result.error = f"unhandled error: {e}"
-            results.append(result)
-        self.finished.emit(results)
+            return i, result
+
+        # Cap file-level workers at 2: each scan_video call already uses up to
+        # 4 threads internally for track extraction, so 2 files x 4 tracks = 8
+        # concurrent ffmpeg processes at peak — reasonable without thrashing disk.
+        n_workers = min(2, total) if total > 0 else 1
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(_scan_one, (i, path)): i
+                for i, path in enumerate(self.paths)
+            }
+            for fut in as_completed(futures):
+                i, result = fut.result()
+                with done_lock:
+                    done_count += 1
+                    count_snap = done_count
+
+                if result is None:
+                    # Cancelled — drain remaining and emit partial in original order
+                    for f in futures:
+                        f.cancel()
+                    ordered = [results_map[k] for k in sorted(results_map)]
+                    self.cancelled.emit(ordered)
+                    return
+
+                results_map[i] = result
+                self.progress.emit(count_snap, total, result.path.name)
+
+        ordered = [results_map[k] for k in sorted(results_map)]
+        self.finished.emit(ordered)
 
 
 class RemuxWorker(QThread):

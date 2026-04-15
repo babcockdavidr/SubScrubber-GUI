@@ -230,17 +230,31 @@ class OcrWorker(QThread):
         self._active_track: Optional[SubtitleTrack] = None
 
     def run(self):
+        import time
         done = []
         for i, track in enumerate(self.tracks):
             self._active_track = track
             self.progress.emit(
                 STRINGS["img_ocr_progress"].format(current=i+1, total=len(self.tracks), lang=track.language, codec=track.codec_display)
             )
+
+            # Throttle frame_progress signals to at most one per 0.1s.
+            # The thread pool in ocr.py calls frame_cb from multiple worker
+            # threads, potentially hundreds of times per second. Crossing the
+            # thread boundary on every call causes UI jank and wastes cycles.
+            _last_emit = [0.0]  # mutable cell for closure
+
+            def _frame_cb(frames_done, total, _le=_last_emit):
+                now = time.monotonic()
+                if now - _le[0] >= 0.1 or frames_done == total:
+                    self.frame_progress.emit(frames_done, total)
+                    _le[0] = now
+
             ocr_track(
                 self.video_path,
                 track,
                 progress_cb=lambda msg: self.progress.emit(msg),
-                frame_cb=lambda done, total: self.frame_progress.emit(done, total),
+                frame_cb=_frame_cb,
             )
             self.track_done.emit(track)
             done.append(track)

@@ -84,20 +84,22 @@ class BatchWorker(QThread):
 
     def run(self):
         import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from core.batch import FileResult, BatchResult
         from core.subtitle import load_subtitle
         from core.cleaner import analyze as _analyze
 
-        results = []
         t0 = time.time()
         total = len(self.paths)
+        results_map: dict = {}   # original index -> FileResult
+        done_count = 0
+        done_lock = threading.Lock()
 
-        for i, path in enumerate(self.paths):
+        def _scan_one(i_path):
+            i, path = i_path
+            # Check cancel before doing any work
             if self._stop.is_set():
-                partial = BatchResult(results=results, elapsed=time.time() - t0)
-                self.cancelled.emit(partial)
-                return
-            self.progress.emit(i, total, path.name)
+                return i, None
             fr = FileResult(path=path)
             try:
                 sub = load_subtitle(path)
@@ -108,9 +110,34 @@ class BatchWorker(QThread):
                 fr.warning_count = sum(1 for b in sub.blocks if b.is_warning)
             except Exception as e:
                 fr.error = str(e)
-            results.append(fr)
+            return i, fr
 
-        self.finished.emit(BatchResult(results=results, elapsed=time.time() - t0))
+        n_workers = min(4, total) if total > 0 else 1
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(_scan_one, (i, path)): i
+                for i, path in enumerate(self.paths)
+            }
+            for fut in as_completed(futures):
+                i, fr = fut.result()
+                with done_lock:
+                    done_count += 1
+                    count_snap = done_count
+
+                if fr is None:
+                    # Task was cancelled — drain remaining futures and emit partial
+                    for f in futures:
+                        f.cancel()
+                    ordered = [results_map[k] for k in sorted(results_map)]
+                    self.cancelled.emit(BatchResult(results=ordered, elapsed=time.time() - t0))
+                    return
+
+                results_map[i] = fr
+                self.progress.emit(count_snap, total, fr.path.name)
+
+        # Reassemble in original file order
+        ordered = [results_map[k] for k in sorted(results_map)]
+        self.finished.emit(BatchResult(results=ordered, elapsed=time.time() - t0))
 
 
 # ---------------------------------------------------------------------------
@@ -640,16 +667,16 @@ class BatchPanel(QWidget):
   .reason      {{ color:#565f89; font-size:11px; margin-right:6px; }}
   .divider     {{ color:#2a3347; }}
 </style>
-<div class="section">" + STRINGS["rpt_batch_summary"] + "</div>
-<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_threshold"] + ' </span>
+<div class="section">{STRINGS["rpt_batch_summary"]}</div>
+<div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_threshold"]} </span>
   <span class="stat-val">regex_matches ≥ {t}</span></div>
-<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_scanned"] + ' </span>
+<div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_scanned"]} </span>
   <span class="stat-val">{self._batch_result.total}</span></div>
-<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_to_clean"] + ' </span>
+<div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_to_clean"]} </span>
   <span class="stat-val" style="color:#f38ba8">{len(flagged)}</span></div>
-<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_clean"] + ' </span>
+<div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_clean"]} </span>
   <span class="stat-val" style="color:#a6e3a1">{len(clean)}</span></div>
-<div class="stat-row"><span class="stat-label">' + STRINGS["rpt_batch_errors"] + ' </span>
+<div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_errors"]} </span>
   <span class="stat-val">{len(errors)}</span></div>
 """]
 

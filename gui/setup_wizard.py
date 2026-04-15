@@ -7,7 +7,6 @@ shows green/red status per tool with download links, and records completion
 in settings.json so it never shows again.
 """
 
-import json
 from pathlib import Path
 
 from PyQt6.QtCore    import Qt, QUrl
@@ -19,21 +18,7 @@ from PyQt6.QtWidgets import (
 from .colors  import BG, BG2, FG, FG2, ACCENT, GREEN, RED, ORANGE
 from .strings import STRINGS
 
-from core.paths import SETTINGS_FILE as _SETTINGS_FILE
-
-
-def _load_settings() -> dict:
-    try:
-        return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+from core.paths import load_settings as _load_settings, save_settings as _save_settings
 
 
 def is_setup_complete() -> bool:
@@ -43,7 +28,7 @@ def is_setup_complete() -> bool:
 
 def mark_setup_complete() -> None:
     """Record that the wizard has been completed."""
-    data = _load_settings()
+    data = dict(_load_settings())
     data["setup_complete"] = True
     _save_settings(data)
 
