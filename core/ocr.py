@@ -46,21 +46,31 @@ from .paths import load_settings as _load_settings, save_settings as _save_setti
 # Tesseract path resolution
 # ---------------------------------------------------------------------------
 
+_tesseract_path_cache: Optional[str] = None
+
+
 def get_tesseract_path() -> Optional[str]:
     """
     Return path to tesseract executable, checking in order:
       1. Saved path in settings.json
       2. System PATH
       3. Default Windows install locations
+    Result is cached after the first lookup.
     """
+    global _tesseract_path_cache
+    if _tesseract_path_cache is not None:
+        return _tesseract_path_cache
+
     settings = _load_settings()
     saved = settings.get("tesseract_path", "")
     if saved and Path(saved).is_file():
-        return saved
+        _tesseract_path_cache = saved
+        return _tesseract_path_cache
 
     on_path = shutil.which("tesseract")
     if on_path:
-        return on_path
+        _tesseract_path_cache = on_path
+        return _tesseract_path_cache
 
     # Common Windows install locations
     for candidate in (
@@ -68,16 +78,19 @@ def get_tesseract_path() -> Optional[str]:
         Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
     ):
         if candidate.is_file():
-            return str(candidate)
+            _tesseract_path_cache = str(candidate)
+            return _tesseract_path_cache
 
     return None
 
 
 def set_tesseract_path(path: str) -> None:
     """Persist a custom tesseract path to settings.json."""
+    global _tesseract_path_cache
     s = dict(_load_settings())
     s["tesseract_path"] = path
     _save_settings(s)
+    _tesseract_path_cache = None  # invalidate so next call re-resolves
 
 
 def tesseract_available() -> bool:

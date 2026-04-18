@@ -35,30 +35,48 @@ _SUBPROCESS_FLAGS: dict = (
 from .paths import load_settings as _load_settings, save_settings as _save_settings
 
 
+_ffmpeg_path_cache:  Optional[str] = None
+_ffprobe_path_cache: Optional[str] = None
+
+
 def get_ffmpeg_path() -> Optional[str]:
+    global _ffmpeg_path_cache
+    if _ffmpeg_path_cache is not None:
+        return _ffmpeg_path_cache
     saved = _load_settings().get("ffmpeg_path", "")
     if saved and Path(saved).is_file():
-        return saved
-    return shutil.which("ffmpeg")
+        _ffmpeg_path_cache = saved
+        return _ffmpeg_path_cache
+    _ffmpeg_path_cache = shutil.which("ffmpeg")
+    return _ffmpeg_path_cache
 
 
 def set_ffmpeg_path(path: str) -> None:
+    global _ffmpeg_path_cache
     s = dict(_load_settings())
     s["ffmpeg_path"] = path
     _save_settings(s)
+    _ffmpeg_path_cache = None
 
 
 def get_ffprobe_path() -> Optional[str]:
+    global _ffprobe_path_cache
+    if _ffprobe_path_cache is not None:
+        return _ffprobe_path_cache
     saved = _load_settings().get("ffprobe_path", "")
     if saved and Path(saved).is_file():
-        return saved
-    return shutil.which("ffprobe")
+        _ffprobe_path_cache = saved
+        return _ffprobe_path_cache
+    _ffprobe_path_cache = shutil.which("ffprobe")
+    return _ffprobe_path_cache
 
 
 def set_ffprobe_path(path: str) -> None:
+    global _ffprobe_path_cache
     s = dict(_load_settings())
     s["ffprobe_path"] = path
     _save_settings(s)
+    _ffprobe_path_cache = None
 
 
 def _find_ffprobe() -> Optional[str]:
@@ -414,7 +432,7 @@ def _scan_video_inner(path: Path, result: VideoScanResult) -> VideoScanResult:
     # before returning so result.tracks is fully populated on exit.
     text_tracks = [t for t in tracks if t.is_text]
     if text_tracks:
-        n_workers = min(4, len(text_tracks))
+        n_workers = min(2, len(text_tracks))
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
             futures = [pool.submit(extract_and_scan_track, path, t) for t in text_tracks]
             wait(futures)  # block until all tracks done; errors captured inside each track

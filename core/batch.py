@@ -130,6 +130,27 @@ class BatchResult:
 
 
 # ---------------------------------------------------------------------------
+# Top-level worker function — must be at module level (not a closure) so
+# ProcessPoolExecutor can pickle it for the spawned subprocess on Windows.
+# ---------------------------------------------------------------------------
+
+def _scan_file(path: Path):
+    """Load and analyze a single subtitle file. Returns a FileResult.
+    Called in a subprocess — no Qt objects, no shared state."""
+    fr = FileResult(path=path)
+    try:
+        sub = load_subtitle(path)
+        analyze(sub)
+        fr.subtitle = sub
+        fr.total_blocks = len(sub.blocks)
+        fr.ad_count = sum(1 for b in sub.blocks if b.is_ad)
+        fr.warning_count = sum(1 for b in sub.blocks if b.is_warning)
+    except Exception as e:
+        fr.error = str(e)
+    return fr
+
+
+# ---------------------------------------------------------------------------
 # Scanner
 # ---------------------------------------------------------------------------
 

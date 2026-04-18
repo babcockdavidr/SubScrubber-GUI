@@ -73,6 +73,10 @@ def clear_model_dir() -> None:
 # Availability
 # ---------------------------------------------------------------------------
 
+# Cached result — faster-whisper imports ctranslate2 + transformers on first
+# import, which can take several seconds. Cache so subsequent calls are free.
+_faster_whisper_available: Optional[bool] = None
+
 def faster_whisper_available() -> bool:
     """Return True if faster-whisper is importable and its dependencies load cleanly.
 
@@ -81,7 +85,13 @@ def faster_whisper_available() -> bool:
     transformers, which does `sys.stderr.flush` at module level and crashes with
     AttributeError. We temporarily substitute a no-op stream so the import can
     proceed, then restore the original value regardless of outcome.
+
+    Result is cached after the first call — the heavy import only happens once
+    per process.
     """
+    global _faster_whisper_available
+    if _faster_whisper_available is not None:
+        return _faster_whisper_available
     import io
     _saved_stderr = _sys.stderr
     _saved_stdout = _sys.stdout
@@ -91,8 +101,10 @@ def faster_whisper_available() -> bool:
         if _sys.stdout is None:
             _sys.stdout = io.StringIO()
         import faster_whisper  # noqa: F401
+        _faster_whisper_available = True
         return True
     except Exception:
+        _faster_whisper_available = False
         return False
     finally:
         _sys.stderr = _saved_stderr
