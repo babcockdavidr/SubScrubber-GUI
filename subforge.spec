@@ -58,6 +58,12 @@ a = Analysis(
         # requires faster-whisper to be installed separately via pip.
         # core.whisper is included so the availability check works correctly.
         "core.whisper",
+        # multiprocessing — required for ProcessPoolExecutor (batch scanning).
+        # freeze_support() is called in main() so spawned workers initialize
+        # correctly in the frozen exe.
+        "multiprocessing",
+        "multiprocessing.spawn",
+        "multiprocessing.forkserver",
         # core.logger — imported lazily at error sites; ensure it's bundled
         "core.logger",
     ],
@@ -103,8 +109,8 @@ app = BUNDLE(
     name="SubForge.app",
     bundle_identifier="com.babcockdavidr.subforge",
     info_plist={
-        "CFBundleShortVersionString": "0.14.0",
-        "CFBundleVersion":            "0.14.0",
+        "CFBundleShortVersionString": "0.15.0",
+        "CFBundleVersion":            "0.15.0",
         "NSHighResolutionCapable":    True,
         "LSMinimumSystemVersion":     "10.15",
     },

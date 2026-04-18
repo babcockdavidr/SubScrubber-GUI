@@ -1,68 +1,175 @@
 SubForge — Development Roadmap
-Last updated: v0.14.0 (complete) — next: v1.0.0
+Last updated: v0.15.0 (complete) — next: v0.16.0
 ================================================================================
 
-Upcoming Release: v1.0.0 — Accessibility, Polish & Release
-  - Rename the Video Scan tab to "Embedded Subs" for clarity, translate into all languages, update the README
-  - Inline editing in the "Embedded Subs" tab and the "Image Subs" tab prior to saving as SRT or Remux, update the README
-  - SUBTITLE FORMAT CONVERSION
-    - SRT ↔ ASS ↔ VTT conversion within the app
-    - Batch format conversion across a library folder
-  - The "About" tab tagline update to "Clean, scan, and create subtitle files — all in one place, all on your machine." This will need translating to all languages via strings.
-  - Light theme and high contrast theme (toggle in Settings)
-  - Font size setting (small/medium/large)
-  - Keyboard navigation audit — every action reachable without mouse
-  - Screen reader compatibility — setAccessibleName/setAccessibleDescription
-    on all major widgets (Windows Narrator, macOS VoiceOver)
-  - GitHub Pages documentation site from README with tab screenshots
-  - File association on macOS
-  - Full test pass: Windows, macOS, Linux
-  - Release candidate period before tagging 1.0.0
-  - Final branding pass — every string, label, tooltip reviewed
-  - Translated READMEs — once the feature set is stable, generate per-language
-    README files (README.es.md, README.fr.md, etc.) in a docs/ folder and link
-    them from the top of the main README. AI-generated to match the 14 language
-    packs. Maintain once, rarely update after 1.0.
+
+v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
+--------------------------------------------------------------------------------
+  GOAL: Let users avoid redundant work in long batch operations, wire up
+  cross-tab navigation shortcuts, warn when transcription would be redundant,
+  and fix the Transcribe tab's wasted layout before the accessibility pass.
+
+  SKIP OPTIONS
+  - Option in Settings to skip files during batch scanning. Two modes:
+      1. Skip previously scanned items (any file SubForge has seen before,
+         even if unchanged).
+      2. Skip only files previously altered by SubForge in a meaningful way
+         (SRT extracted, remuxed, or OCR converted).
+    Each mode needs a registry (a lightweight JSON or SQLite log in AppData)
+    that records which files were acted on, by which tab, and when.
+
+  - Extend skip options to the Embedded Subs and Image Subs tabs. Consider
+    whether tabs need separate registries. Key edge case: a user might clean
+    an external .srt in Batch, then later scan the same video under Embedded
+    Subs for the first time — these are genuinely different operations and
+    should not cross-block each other. Separate per-tab logs appear safest.
+    Confirm the performance cost of the registry lookup before a batch scan
+    is negligible (read-once into memory at scan start, not per-file disk I/O).
+
+  CROSS-TAB WORKFLOW
+  - "Open in Transcribe →" button on the Embedded Subs tab. Appears only when
+    the scanned video has no subtitle tracks of any kind AND no external .srt
+    file of the same stem already exists next to the video file. Mirrors the
+    "Open in Image Subs →" button already present. Do not show this button
+    if any external subtitle file is detected, to avoid directing the user
+    to transcribe something that already has subs.
+
+  - Warning banner on the Transcribe tab when the selected video already has
+    embedded, image-based, or external subtitle tracks. The warning should
+    name the track types found so the user can make an informed decision
+    rather than inadvertently creating a duplicate.
+
+  TRANSCRIBE TAB REDESIGN
+  - The Options panel currently occupies the entire left half of the screen
+    for a single checkbox. Move all options (SDH mode, Save as .srt, Remux
+    into video, Keep backup) into a single horizontal options bar below the
+    Transcription Results table. The results table should then span the full
+    width of the tab.
+
+  - Confirm that the inline editing feature (v0.15.0) and the new layout
+    work together correctly — the editable table must still be full-width
+    after the redesign.
+
+  - Update any layout-related strings or tooltips, translate into all 14
+    language packs.
 
 
+v0.17.0 — Subtitle Format Conversion & Expanded Format Support
+--------------------------------------------------------------------------------
+  GOAL: Let users convert subtitle files between formats and add support for
+  the subtitle formats beyond SRT/ASS/VTT that are currently out of scope.
+  pysubs2 already handles much of the heavy lifting — this is primarily UI
+  and format coverage work.
+
+  FORMAT CONVERSION
+  - Single-file conversion: SRT ↔ ASS ↔ VTT. A dedicated Convert tab or a
+    context action in Single File (decide which is cleaner before coding).
+    Input format detected automatically from the file extension. Output format
+    selected by the user. Output file written next to the source using the
+    same stem + new extension.
+
+  - Batch format conversion. Apply a format conversion across all subtitle
+    files in a folder, with a target format dropdown. Output files written
+    next to each source file (or optionally into a subfolder — decide before
+    coding). Report how many files were converted and flag any failures.
+
+  EXPANDED FORMAT SUPPORT
+  - Add support for WebVTT, TTML, SAMI, SUB, SBV, and any other formats
+    pysubs2 can handle. Audit pysubs2's format coverage first before writing
+    any custom parsers.
+
+  - Evaluate round-trip fidelity for each format (timing precision, tag
+    stripping, encoding). If there are known lossy edges, surface a warning
+    in the UI rather than silently degrading the output.
+
+  - Add new strings to all 14 language packs.
+
+
+v1.0.0 — Accessibility, Themes & Release
+--------------------------------------------------------------------------------
+  GOAL: Full accessibility pass, visual theme support, and the final polish
+  that makes SubForge worthy of a 1.0 label. No new major features after this
+  point — only bug fixes, stability, and the release candidate period.
+
+  - Light theme and high-contrast theme toggle in Settings > General.
+    Dark theme is the existing default. The toggle must reapply immediately
+    without restart (same pattern as sensitivity slider). Store selection in
+    settings.json.
+
+  - Font size setting in Settings > General: Small / Medium / Large.
+    Scales the UI text globally via QApplication.setFont or a stylesheet
+    substitution. Must not break fixed-size widgets or icons.
+
+  - Keyboard navigation audit. Every interactive element reachable and
+    operable without a mouse. Tab order must be logical within each tab.
+    All buttons, sliders, and dropdowns must respond to keyboard input
+    correctly.
+
+  - Screen reader compatibility. Call setAccessibleName() and
+    setAccessibleDescription() on all major widgets. Test with Windows
+    Narrator at a minimum. Provide meaningful labels for icon-only buttons
+    and progress indicators.
+
+  - Final branding pass. Every user-facing string, label, button text,
+    and tooltip reviewed for consistency and clarity.
+
+  - Translated READMEs. Generate README.es.md, README.fr.md, etc. (one per
+    language pack) in a docs/ folder, linked from the top of the main README.
+    AI-generated translations are fine. These are maintenance-light once
+    written — only update when major features ship.
+
+  - Release candidate period. Tag an RC build, run a clean-machine install
+    test, and give at least a few days for issue reports before tagging 1.0.0.
+
+
+================================================================================
 POST-1.0 — FUTURE FEATURES
-
-  IMPROVEMENTS TO BATCH SCANNING AND MULTITHREADING ON ALL TABS
+================================================================================
 
   MACOS AND LINUX BINARIES
-  - Dropped from v0.9.0 scope — Windows installer alone was complex enough
-    to validate. Source code remains cross-platform.
-  - macOS: requires physical hardware to test, code signing complexity
-  - Linux: can be tested via VM — candidate for a minor post-1.0 release
-  - GitHub Actions workflow already has macOS/Linux jobs written and ready;
-    just needs testing and re-enabling when the time comes
---------------------------------------------------------------------------------
-These are real planned features, not wishlist items. Priority order TBD.
-
-
-
-  ANDROID
-  - BeeWare/Briefcase port
-  - Genuinely complex, not a near-term priority
+  - Source code is cross-platform Python, but binaries require per-platform
+    packaging and testing.
+  - macOS requires physical Apple hardware for code signing and testing.
+    Not currently feasible — no Apple devices available.
+  - Linux can be tested in a VM. Candidate for an early post-1.0 minor release.
+  - GitHub Actions already has macOS/Linux jobs written — just needs enabling
+    and a test pass when the time comes.
+  - Any platform-specific code must be additive (wrapped in platform checks),
+    never replacing the Windows-specific frozen .exe path.
 
   AUTO-UPDATE
-  - Download and apply updates in-app rather than linking to releases
-  - Security implications need careful review before implementing
+  - Download and apply updates in-app rather than opening the browser.
+  - Security implications (signature verification, rollback) need careful
+    design before implementation.
 
   PLUGIN SYSTEM
-  - User-written detection logic in Python beyond regex
-  - For edge cases the regex engine cannot handle
+  - User-written detection logic in Python, for edge cases the regex engine
+    cannot handle.
+  - Sandboxing and a defined API surface need design work before coding.
 
 
+================================================================================
 DECISIONS & STANDING RULES
---------------------------------------------------------------------------------
-  - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0 etc.)
-  - Extract & Save filename: [video stem].[lang].[ext] e.g. Movie.eng.srt
-    SDH tracks: Movie.eng.sdh.srt
-  - SubForge is an accessibility tool — SDH removal and any feature that
+================================================================================
+  - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0, etc.)
+  - Extract & Save filename format: [video stem].[lang].[ext]
+    e.g. Movie.eng.srt — SDH tracks: Movie.eng.sdh.srt
+  - SubForge is an accessibility tool. SDH removal and any feature that
     degrades the HoH experience must carry a visible warning and must never
     be enabled by default. Always default to the HoH-friendly option.
   - Track title normalization during remux is always on — no option.
-    Encoder credits in track titles serve no user and actively hurt
-    HoH users navigating subtitle menus.
+    Encoder credits in track titles serve no user and actively hurt HoH
+    users navigating subtitle menus.
   - Cleaning options are global (settings.json), not per-tab.
+  - New UI strings must be added to all 14 language packs — no exceptions.
+  - Module ownership is strict: ffmpeg/ffprobe path resolution in
+    core/ffprobe.py; mkvmerge in core/mkvtoolnix.py; Tesseract in core/ocr.py.
+    Path resolution logic must not bleed across module boundaries.
+  - Check for Updates stays in the status bar permanently.
+  - Settings is a toolbar dialog, not a tab.
+  - No emojis on buttons except ⚙ on the Settings button.
+  - os.execv fails in frozen (PyInstaller) apps — use QProcess.startDetached
+    or relaunch via subprocess for anything that requires a restart.
+  - Settings must write to AppData (installer) or the repo root (source),
+    never to Program Files.
+  - Subprocess console windows must be suppressed (creationflags on Windows).

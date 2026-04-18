@@ -183,19 +183,32 @@ def cmd_scan_video(args) -> int:
 # ---------------------------------------------------------------------------
 
 def main():
+    # Required for ProcessPoolExecutor to work correctly in a PyInstaller
+    # frozen executable on Windows. Must be called before any process is spawned.
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     parser = argparse.ArgumentParser(
-        prog="subscrubber",
-        description="SubForge — Remove ads from subtitle files (.srt .ass .ssa .vtt)",
+        prog="subforge",
+        description="SubForge — Clean, scan, and create subtitle files.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  subscrubber movie.en.srt                    Clean a single file
-  subscrubber movie.en.srt --dry-run          Detect only, do not write
-  subscrubber /shows/ -r                      Recursive folder clean
-  subscrubber /shows/ -r --report-only        Scan and report, do not clean
-  subscrubber movie.mkv --scan-video          Probe embedded subtitle tracks
-  subscrubber /movies/ -r --scan-video        Scan a whole library
-  subscrubber movie.en.srt --gui              Launch GUI with file pre-loaded
+GUI:
+  python subforge.py                          Launch the GUI (default, no flags needed)
+  python subforge.py movie.en.srt            Launch GUI with file pre-loaded
+
+CLI — subtitle cleaning:
+  python subforge.py movie.en.srt            Clean a single subtitle file
+  python subforge.py movie.en.srt --dry-run  Detect only, do not write
+  python subforge.py /shows/ -r              Recursive folder clean
+  python subforge.py /shows/ -r --report-only  Scan and report, do not clean
+
+CLI — embedded subtitle scanning (requires ffprobe):
+  python subforge.py movie.mkv --scan-video  Probe embedded subtitle tracks
+  python subforge.py /movies/ -r --scan-video  Scan a whole library
+
+Note: GUI-only features (Image Subs, Transcribe) are not available via CLI
+as they require Tesseract OCR and Whisper respectively.
 """,
     )
 
@@ -218,7 +231,7 @@ Examples:
     parser.add_argument("--report-only", action="store_true",
                         help="Scan and print report but do not write any files")
     parser.add_argument("--scan-video", action="store_true",
-                        help="Probe embedded subtitle tracks in video files (needs ffprobe)")
+                        help="Probe embedded subtitle tracks in video files (requires ffprobe)")
     parser.add_argument("--gui", action="store_true",
                         help="Launch the GUI (pre-loads given paths if any)")
 

@@ -1,5 +1,21 @@
 # SubForge — Release Notes
 
+## v0.15.0 — Performance, Rename & Polish
+
+- **App startup dramatically faster** — the app previously took up to 10 seconds to open. The culprit was importing `faster-whisper` (and its `ctranslate2` + `transformers` dependencies) synchronously at startup. The check is now deferred to a background thread with a cached result. Startup is near-instant from both source and the frozen executable.
+- **Batch scanning ~3.5x faster** — replaced `ThreadPoolExecutor` (GIL-bound for CPU work) with `ProcessPoolExecutor`, so subtitle files are parsed and analyzed in true parallel across up to 4 subprocesses. 200 files now complete in ~11 seconds instead of ~39 seconds.
+- **Embedded Subs scanning ~5x faster** — three compounding improvements: tool path resolution is now cached (previously called `shutil.which` once per track from multiple threads); file-level concurrency raised from 2 to 4; work submission changed from bulk to bounded incremental, preventing throughput collapse mid-scan. 101 files now complete in ~1:14 instead of ~6:05.
+- **Scan elapsed timer** — a timer appears in the status bar whenever a Batch or Embedded Subs scan is running, showing elapsed time in m:ss format. Stays visible for 5 seconds after the scan completes.
+- **"Video Scan" tab renamed to "Embedded Subs"** — the tab label is updated in all 14 supported languages. Internal code names are unchanged.
+- **Inline editing — Embedded Subs tab** — after scanning, clicking a text track switches the detail pane to an editable table showing every subtitle block. Double-click any text cell to correct it. Edits apply immediately — Save as .srt and Clean & Remux both use the corrected output.
+- **Inline editing — Image Subs tab** — the same editable table appears as soon as OCR completes on a track. Especially useful since OCR output is imperfect by nature.
+- **Track deletion before remux** — every track row in the Embedded Subs tree now has an inline ✕ button. Click it to mark that track for permanent removal from the video on the next remux. The Clean & Remux button shows a count when multiple videos are involved (e.g. "Clean & Remux (4)"). Works alongside cleaning — you can clean some tracks and delete others in the same operation.
+- **About tab tagline updated** — now reads "Clean, scan, and create subtitle files — all in one place, all on your machine." Updated in all 14 languages.
+- **CLI cleaned up** — `python subforge.py --help` is now documented as the CLI entry point. The stale `--gui` flag is removed from examples. A note explains which features are GUI-only.
+- **README updated** — all "Video Scan" references updated to "Embedded Subs" throughout. CLI reference corrected.
+
+---
+
 ## v0.14.0 — Performance & Polish
 
 - **OCR pipeline performance** — Image Subs scanning is significantly faster. The brightness heuristic in preprocessing now samples 500 random pixels instead of materializing the entire pixel array. The PGS RLE decoder was rewritten using a pre-allocated `bytearray` with a write cursor, eliminating per-pixel Python object overhead. The palette lookup in `build_image()` was replaced with a NumPy vectorized LUT operation. Both the PGS and VOBSUB OCR loops now run in a `ThreadPoolExecutor` (up to 4 workers), and the panel's frame progress signal is throttled to at most one emission per 100ms to prevent UI jank on high frame-count tracks.

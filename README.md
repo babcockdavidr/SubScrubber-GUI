@@ -1,4 +1,4 @@
-# SubForge — v0.14.0: Performance & Polish
+# SubForge — v0.15.0: Performance, Rename & Polish
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,11 +10,18 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.14.0 — Performance & Polish
-- **OCR pipeline performance** — Image Subs scanning is significantly faster. The brightness heuristic in preprocessing now samples 500 random pixels instead of materializing the entire pixel array. The PGS RLE decoder was rewritten using a pre-allocated `bytearray` with a write cursor, eliminating per-pixel Python object overhead. The palette lookup in `build_image()` was replaced with a NumPy vectorized LUT operation. Both the PGS and VOBSUB OCR loops now run in a `ThreadPoolExecutor` (up to 4 workers), and the panel's frame progress signal is throttled to at most one emission per 100ms to prevent UI jank on high frame-count tracks.
-- **Parallel subtitle scanning** — Batch processing and Video Scan now run in thread pools. Batch files are scanned up to 4 at a time. Within Video Scan, all text tracks in a single video are extracted in parallel (up to 4 concurrent ffmpeg processes), and multiple video files are processed 2 at a time to avoid over-saturating disk I/O.
-- **Settings cache** — `settings.json` was previously read from disk and JSON-parsed on every call to resolve tool paths (ffmpeg, ffprobe, mkvmerge, Tesseract). This happened once per subtitle track, from multiple threads simultaneously. A shared in-memory cache in `core/paths.py` now reads the file once and serves all subsequent requests from memory, invalidating only on write.
-- **Tesseract OCR character corrections** — a post-processing step corrects common Tesseract misreads in subtitle OCR output. Music note substitutions corrected: `~`, `¢`, `£`, `#`, `Py`, `JJ`, `fF`, `ff`, `IS`, `Ss`, `J`, `f`, and `I` at line end are all mapped back to ♪ in the appropriate context. Dialogue character fixes: `|` used as capital `I`, `[` before lowercase (e.g. `['m` → `I'm`), and `/` before lowercase (e.g. `/ma` → `I'ma`) are all corrected.
+### v0.15.0 — Performance, Rename & Polish
+- **App startup dramatically faster** — the app previously took up to 10 seconds to open. The culprit was importing `faster-whisper` (and its `ctranslate2` + `transformers` dependencies) synchronously at startup. The check is now deferred to a background thread with a cached result. Startup is near-instant from both source and the frozen executable.
+- **Batch scanning ~3.5x faster** — replaced `ThreadPoolExecutor` (GIL-bound for CPU work) with `ProcessPoolExecutor`, so subtitle files are parsed and analyzed in true parallel across up to 4 subprocesses. 200 files now complete in ~11 seconds instead of ~39 seconds.
+- **Embedded Subs scanning ~5x faster** — three compounding improvements: tool path resolution is now cached (previously called `shutil.which` once per track from multiple threads); file-level concurrency raised from 2 to 4; work submission changed from bulk to bounded incremental, preventing throughput collapse mid-scan. 101 files now complete in ~1:14 instead of ~6:05.
+- **Scan elapsed timer** — a timer appears in the status bar whenever a Batch or Embedded Subs scan is running, showing elapsed time in m:ss format. Stays visible for 5 seconds after the scan completes.
+- **"Video Scan" tab renamed to "Embedded Subs"** — the tab label is updated in all 14 supported languages. Internal code names are unchanged.
+- **Inline editing — Embedded Subs tab** — after scanning, clicking a text track switches the detail pane to an editable table showing every subtitle block. Double-click any text cell to correct it. Edits apply immediately — Save as .srt and Clean & Remux both use the corrected output.
+- **Inline editing — Image Subs tab** — the same editable table appears as soon as OCR completes on a track. Especially useful since OCR output is imperfect by nature.
+- **Track deletion before remux** — every track row in the Embedded Subs tree now has an inline ✕ button. Click it to mark that track for permanent removal from the video on the next remux. The Clean & Remux button shows a count when multiple videos are involved (e.g. "Clean & Remux (4)"). Works alongside cleaning — you can clean some tracks and delete others in the same operation.
+- **About tab tagline updated** — now reads "Clean, scan, and create subtitle files — all in one place, all on your machine." Updated in all 14 languages.
+- **CLI cleaned up** — `python subforge.py --help` is now documented as the CLI entry point. The stale `--gui` flag is removed from examples. A note explains which features are GUI-only.
+- **README updated** — all "Video Scan" references updated to "Embedded Subs" throughout. CLI reference corrected.
 
 ---
 
@@ -49,7 +56,7 @@ But SubForge is more than a cleaner. It can scan image-based subtitle tracks tha
 
 **If running from source:**
 - Python 3.10 or newer
-- FFmpeg (optional — only needed for Video Scan and MP4 remux)
+- FFmpeg (optional — only needed for Embedded Subs and MP4 remux)
 - MKVToolNix (optional — only needed for Clean & Remux on MKV files)
 - Tesseract OCR (optional — only needed for the Image Subs tab)
 - faster-whisper (optional — only needed for the Transcribe tab)
@@ -75,11 +82,14 @@ pip install faster-whisper
 **From source:** navigate to the repo folder and run:
 
 ```bash
-# Open the GUI (or just double-click if using the executable)
+# Open the GUI (default — or just double-click the executable)
 python subforge.py
 
 # Open the GUI with a file pre-loaded
-python subforge.py movie.en.srt --gui
+python subforge.py movie.en.srt
+
+# See all CLI options
+python subforge.py --help
 
 # CLI only — no GUI needed
 python subforge.py movie.en.srt
@@ -89,7 +99,7 @@ python subforge.py movie.en.srt
 
 ## GUI Overview
 
-The main window has six tabs: **Single File**, **Batch**, **Video Scan**, **Image Subs**, **Transcribe**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current state on the left, a **Check for Updates** button, and the version number on the right.
+The main window has six tabs: **Single File**, **Batch**, **Embedded Subs**, **Image Subs**, **Transcribe**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current operation status on the left — including a live elapsed timer during scans — a **Check for Updates** button, and the version number on the right.
 
 ---
 
@@ -101,12 +111,12 @@ Click **⚙ Settings** in the toolbar to open the Settings dialog. It has four t
 
 ![Settings, General](images/Settings_Screenshot.png)
 
-- **Default sensitivity** — sets the starting sensitivity level (1–5) applied to all tabs when SubForge launches. Drag the slider toward Aggressive to catch more blocks, or toward Conservative to reduce false positives. This is the same slider available in Single File, Batch, and Video Scan — changing it here sets what value those sliders start at on next launch.
+- **Default sensitivity** — sets the starting sensitivity level (1–5) applied to all tabs when SubForge launches. Drag the slider toward Aggressive to catch more blocks, or toward Conservative to reduce false positives. This is the same slider available in Single File, Batch, and Embedded Subs — changing it here sets what value those sliders start at on next launch. A scan elapsed timer in the status bar shows how long each Batch or Embedded Subs scan takes.
 - **Language** — changes the interface language. SubForge supports 14 languages: English, Spanish, Dutch, Hebrew, Indonesian, Portuguese, Swedish, French, Arabic, Chinese, Hindi, Russian, Turkish, and Polish. A restart is required to apply the change; SubForge will offer to restart automatically.
 
 ### Cleaning Options
 
-Cleaning options apply globally across Single File, Batch, and Video Scan at the time a file is saved or remuxed. They do not affect detection — only what gets written to disk.
+Cleaning options apply globally across Single File, Batch, and Embedded Subs at the time a file is saved or remuxed. They do not affect detection — only what gets written to disk.
 
 ![Settings, Cleaning Options](images/Settings_Screenshot2.png)
 
@@ -127,8 +137,8 @@ Cleaning options apply globally across Single File, Batch, and Video Scan at the
 
 Configure where SubForge looks for external tools. Each entry has a Browse button and a live status indicator showing whether the tool was found. Leave any field blank to rely on system PATH.
 
-- **FFmpeg** — required for Video Scan, MP4 remux, and the Transcribe tab
-- **ffprobe** — required for Video Scan and Image Subs track detection
+- **FFmpeg** — required for Embedded Subs, MP4 remux, and the Transcribe tab
+- **ffprobe** — required for Embedded Subs and Image Subs track detection
 - **mkvmerge** — required for MKV remux across all tabs
 - **Tesseract** — required for the Image Subs tab
 - **Whisper model directory** — where downloaded Whisper models are cached. Leave blank to use the default location inside SubForge's data folder
@@ -203,19 +213,21 @@ For cleaning an entire media library in one pass, including libraries where each
 
 ---
 
-## Video Scan Tab
+## Embedded Subs Tab
 
-For scanning embedded subtitle tracks inside video files without extracting them first.
+For scanning, editing, and cleaning embedded subtitle tracks inside video files without extracting them first.
 
-![Video Scan Tab](images/Video_Scan_Screenshot.png)
+![Embedded Subs Tab](images/Video_Scan_Screenshot.png)
 
 **Workflow:**
 1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
 2. Click **Scan** — ffprobe reads each file's subtitle streams. Text tracks are analysed immediately; image tracks are flagged for OCR
 3. Each video appears in the left list with a color-coded summary of its subtitle tracks
-4. Click a video to see all its subtitle tracks in the detail pane. Click a track to see its blocks
-5. For clean text tracks, use **Clean & Remux** to write a new video with the cleaned subtitle replacing the original
-6. For image tracks, use **Open in Image Subs →** to hand the file off to the Image Subs tab for OCR
+4. Click a track to see its subtitle blocks in the detail pane — the pane switches to an editable table showing every block. Double-click any text cell to correct it before saving
+5. Check the box next to any flagged track to select it for cleaning, then use **Clean & Remux** to write a new video with the cleaned subtitle replacing the original
+6. To permanently remove a subtitle track from a video, click the **✕** button on the right side of that track row. Marked tracks are excluded from the output on the next remux — useful for removing unwanted language tracks or clearing all existing subtitles
+7. For image tracks, use **Open in Image Subs →** to hand the file off to the Image Subs tab for OCR
+8. The **Clean & Remux** button shows a count when multiple videos are involved (e.g. **Clean & Remux (4)**) and processes them all in sequence
 
 ---
 
@@ -226,12 +238,13 @@ For scanning PGS (Blu-ray) and VOBSUB (DVD) image-based subtitle tracks using Te
 ![Image Subs Tab](images/Image_Subs_Screenshot.png)
 
 **Workflow:**
-1. Drop a video file onto the drop zone, or use the handoff button from Video Scan
+1. Drop a video file onto the drop zone, or use the handoff button from Embedded Subs
 2. SubForge extracts one bitmap per subtitle event, runs Tesseract OCR, and assembles the text into a subtitle file
 3. The detection engine runs on the OCR output unchanged — the same pipeline as text tracks
 4. Use the **Sensitivity slider** to adjust the detection threshold
-5. Use **Save as .srt** to write the OCR'd subtitle as a standalone file next to the video
-6. Use **Remux into video** to add the text track to the video — on MKV, you can choose to replace or keep the original image track alongside it
+5. After scanning, the detail pane switches to an editable table — double-click any text cell to correct OCR errors before saving
+6. Use **Save as .srt** to write the OCR'd subtitle as a standalone file next to the video
+7. Use **Remux into video** to add the text track to the video — on MKV, you can choose to replace or keep the original image track alongside it
 
 ---
 
@@ -268,9 +281,9 @@ For managing and editing the regex profiles that drive ad detection.
 
 ---
 
-## Installing FFmpeg (required for Video Scan and MP4 remux)
+## Installing FFmpeg (required for Embedded Subs and MP4 remux)
 
-FFmpeg provides `ffprobe` (used for subtitle stream detection) and `ffmpeg` (used for MP4 remuxing and image subtitle extraction). It is not required for cleaning standalone subtitle files.
+FFmpeg provides `ffprobe` (used for subtitle stream detection) and `ffmpeg` (used for MP4 remuxing and image subtitle extraction). It is not required for cleaning standalone subtitle files or for MKV remux.
 
 ### Step 1 — Download FFmpeg
 
@@ -309,7 +322,7 @@ Open a new PowerShell or Command Prompt window (it must be a new window — exis
 ffprobe -version
 ```
 
-If it prints version information, FFmpeg is on your PATH and SubForge's Video Scan tab will work. If you still see "not recognized", double-check the path you entered in Step 3 — it should point to the folder containing `ffmpeg.exe`, not to `ffmpeg.exe` itself.
+If it prints version information, FFmpeg is on your PATH and SubForge's Embedded Subs tab will work. If you still see "not recognized", double-check the path you entered in Step 3 — it should point to the folder containing `ffmpeg.exe`, not to `ffmpeg.exe` itself.
 
 > You must open a new terminal window after editing PATH. Restarting SubForge after adding FFmpeg to PATH is also required.
 
@@ -321,11 +334,13 @@ MKVToolNix provides `mkvmerge`, which SubForge uses to rebuild MKV files with cl
 
 Download from **https://mkvtoolnix.download/** and run the installer. The installer adds `mkvmerge` to your PATH automatically. SubForge also checks the default install location (`C:\Program Files\MKVToolNix\`) so it will usually be found even if PATH was not updated.
 
-If SubForge still cannot find it, click **Settings** in the Video Scan tab and browse for `mkvmerge.exe` manually.
+If SubForge still cannot find it, open **⚙ Settings > Paths** and browse for `mkvmerge.exe` manually.
 
 ---
 
 ## CLI Reference
+
+`python subforge.py --help` prints the full option list. Common usage:
 
 ```bash
 # Clean a single file (writes in place)
@@ -352,14 +367,12 @@ python subforge.py movie.en.srt --remove-warnings
 # Skip confirmation prompt (for scripting / automation)
 python subforge.py /media/shows -r -y
 
-# Scan embedded subtitle tracks inside video files
+# Probe embedded subtitle tracks inside video files
 python subforge.py movie.mkv --scan-video
 python subforge.py /media/movies -r --scan-video
-
-# Launch the GUI, optionally pre-loading files
-python subforge.py --gui
-python subforge.py movie.en.srt --gui
 ```
+
+> **Note:** Image Subs (OCR) and Transcribe (Whisper) are GUI-only features. They depend on Tesseract and faster-whisper respectively and cannot be driven from the CLI.
 
 ---
 
@@ -382,7 +395,7 @@ Detection is driven by `.conf` regex profiles stored in `regex_profiles/default/
 - Each WARNING_REGEX match: **+1 point**
 - Contextual punishers each add **+1 point**: appearing in the first or last 3 blocks (`close_to_start` / `close_to_end`), being within 15 blocks of a confirmed ad (`nearby_ad`), being adjacent to a warning-level block (`adjacent_ad`), having identical content elsewhere in the file (`similar_content`), or starting in the first second of the file (`quick_start`)
 - Structural detectors promote blocks without regex matches: `wedged_block` (sandwiched between confirmed ads), `chain_block` (part of a run of incrementally-growing linked blocks)
-- Default threshold: **3 points = ad**, **2 points = warning**. Adjustable via the Sensitivity slider in Single File, Batch, and Video Scan tabs.
+- Default threshold: **3 points = ad**, **2 points = warning**. Adjustable via the Sensitivity slider in Single File, Batch, and Embedded Subs tabs.
 
 ---
 
@@ -417,10 +430,10 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 SubForge is under active development. Here is what is coming next.
 
 **v1.0.0 — Accessibility & Release**
-Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Multi-thread scanning across Batch, Video Scan, and Image Subs. Full cross-platform test pass. Windows uninstaller cleanup of AppData.
+Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass.
 
 The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.14.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.15.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
