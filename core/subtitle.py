@@ -205,22 +205,29 @@ class SubBlock:
 # ---------------------------------------------------------------------------
 
 class SubtitleFormat(Enum):
-    SRT = "srt"
-    ASS = "ass"
-    SSA = "ssa"
-    VTT = "vtt"
-    UNKNOWN = "unknown"
+    SRT      = "srt"
+    ASS      = "ass"
+    SSA      = "ssa"
+    VTT      = "vtt"
+    TTML     = "ttml"
+    SAMI     = "sami"
+    MICRODVD = "microdvd"
+    UNKNOWN  = "unknown"
 
 
-SUPPORTED_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt"}
+SUPPORTED_EXTENSIONS = {".srt", ".ass", ".ssa", ".vtt", ".ttml", ".sami", ".smi", ".sub"}
 
 
 def detect_format(path: Path) -> SubtitleFormat:
     return {
-        ".srt": SubtitleFormat.SRT,
-        ".ass": SubtitleFormat.ASS,
-        ".ssa": SubtitleFormat.SSA,
-        ".vtt": SubtitleFormat.VTT,
+        ".srt":  SubtitleFormat.SRT,
+        ".ass":  SubtitleFormat.ASS,
+        ".ssa":  SubtitleFormat.SSA,
+        ".vtt":  SubtitleFormat.VTT,
+        ".ttml": SubtitleFormat.TTML,
+        ".sami": SubtitleFormat.SAMI,
+        ".smi":  SubtitleFormat.SAMI,
+        ".sub":  SubtitleFormat.MICRODVD,
     }.get(path.suffix.lower(), SubtitleFormat.UNKNOWN)
 
 
@@ -565,6 +572,11 @@ def load_subtitle(path: Path) -> ParsedSubtitle:
     fmt = detect_format(path)
     if fmt == SubtitleFormat.UNKNOWN:
         raise ValueError(f"Unsupported subtitle format: {path.suffix}")
+
+    # TTML, SAMI, and MicroDVD are parsed via pysubs2 then bridged into our model
+    if fmt in (SubtitleFormat.TTML, SubtitleFormat.SAMI, SubtitleFormat.MICRODVD):
+        return _load_via_pysubs2(path, fmt)
+
     content, encoding = _read_file(path)
     subtitle = ParsedSubtitle(path=path, fmt=fmt)
     subtitle.encoding = encoding
@@ -577,14 +589,67 @@ def load_subtitle(path: Path) -> ParsedSubtitle:
     return subtitle
 
 
+def _load_via_pysubs2(path: Path, fmt: SubtitleFormat) -> ParsedSubtitle:
+    """Load TTML, SAMI, or MicroDVD via pysubs2 and bridge into SubForge's model."""
+    import pysubs2
+    ssa = pysubs2.load(str(path))
+    subtitle = ParsedSubtitle(path=path, fmt=fmt)
+    subtitle.encoding = "utf-8"
+    for i, event in enumerate(ssa, 1):
+        if event.is_comment:
+            continue
+        text = event.plaintext.strip()
+        if not text:
+            continue
+        start = datetime.timedelta(milliseconds=event.start)
+        end   = datetime.timedelta(milliseconds=event.end)
+        block = SubBlock.__new__(SubBlock)
+        block.original_index  = i
+        block.current_index   = i
+        block.start_time      = start
+        block.end_time        = end
+        block.content         = text
+        block.clean_content   = re.sub(r"[\s.,:_-]", "", text)
+        block.regex_matches   = 0
+        block.hints           = []
+        block._ass_raw_line   = None
+        block._vtt_raw_lines  = None
+        subtitle.blocks.append(block)
+    return subtitle
+
+
 def write_subtitle(subtitle: ParsedSubtitle, dest: Optional[Path] = None) -> None:
     out = dest or subtitle.path
     if subtitle.fmt == SubtitleFormat.SRT:
         content = _write_srt(subtitle)
+        out.write_text(content, encoding="utf-8")
     elif subtitle.fmt in (SubtitleFormat.ASS, SubtitleFormat.SSA):
         content = _write_ass(subtitle)
+        out.write_text(content, encoding="utf-8")
     elif subtitle.fmt == SubtitleFormat.VTT:
         content = _write_vtt(subtitle)
+        out.write_text(content, encoding="utf-8")
+    elif subtitle.fmt in (SubtitleFormat.TTML, SubtitleFormat.SAMI, SubtitleFormat.MICRODVD):
+        _write_via_pysubs2(subtitle, out)
     else:
         raise ValueError(f"Cannot write format: {subtitle.fmt}")
-    out.write_text(content, encoding="utf-8")
+
+
+def _write_via_pysubs2(subtitle: ParsedSubtitle, dest: Path) -> None:
+    """Write TTML, SAMI, or MicroDVD via pysubs2."""
+    import pysubs2
+    ssa = pysubs2.SSAFile()
+    for block in subtitle.blocks:
+        event = pysubs2.SSAEvent(
+            start=int(block.start_time.total_seconds() * 1000),
+            end=int(block.end_time.total_seconds() * 1000),
+            text=block.content.replace("\n", "\\N"),
+        )
+        ssa.append(event)
+    if subtitle.fmt == SubtitleFormat.TTML:
+        fmt_id = "ttml"
+    elif subtitle.fmt == SubtitleFormat.MICRODVD:
+        fmt_id = "microdvd"
+    else:
+        fmt_id = "sami"
+    ssa.save(str(dest), format_=fmt_id)
