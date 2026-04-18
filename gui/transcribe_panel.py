@@ -387,11 +387,12 @@ class TranscribePanel(QWidget):
         self._edit_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Fixed)
         self._edit_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Fixed)
+            1, QHeaderView.ResizeMode.Interactive)
         self._edit_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch)
+        self._edit_table.horizontalHeader().setStretchLastSection(False)
         self._edit_table.setColumnWidth(0, 42)
-        self._edit_table.setColumnWidth(1, 210)
+        self._edit_table.setColumnWidth(1, 280)
         self._edit_table.verticalHeader().setVisible(False)
         self._edit_table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows)
@@ -409,8 +410,10 @@ class TranscribePanel(QWidget):
             f"QTableWidget::item:selected {{ background: {BG3}; color: {FG}; }}"
             f"QTableWidget::item:alternate {{ background: {BG}; }}"
             f"QHeaderView::section {{ background: {BG3}; color: {FG2}; "
-            f"border: none; border-bottom: 1px solid {BORDER}; "
-            f"padding: 4px 6px; }}"
+            f"border: none; border-right: 1px solid {BORDER}; "
+            f"border-bottom: 2px solid {BORDER}; "
+            f"padding: 6px 6px; }}"
+            f"QHeaderView::section:hover {{ background: {BG}; color: {FG}; }}"
         )
         self._edit_table.itemChanged.connect(self._on_cell_edited)
         self._detail_stack.addWidget(self._edit_table)   # index 1
@@ -710,10 +713,9 @@ class TranscribePanel(QWidget):
             idx_item.setForeground(QColor(FG2))
             self._edit_table.setItem(row, 0, idx_item)
 
-            # Column 1 — timestamp (read-only)
+            # Column 1 — timestamp (editable)
             ts = f"{block.start} → {block.end}"
             ts_item = QTableWidgetItem(ts)
-            ts_item.setFlags(ts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             ts_item.setForeground(QColor("#7dcfff"))
             self._edit_table.setItem(row, 1, ts_item)
 
@@ -729,19 +731,46 @@ class TranscribePanel(QWidget):
     # ── Inline edit sync ─────────────────────────────────────────────────
 
     def _on_cell_edited(self, item: QTableWidgetItem):
-        """Sync an edited text cell back to the subtitle data model."""
-        if item.column() != 2:
-            return
+        """Sync an edited cell back to the subtitle data model."""
         if not self._subtitle:
             return
         row = item.row()
         if row < 0 or row >= len(self._subtitle.blocks):
             return
-        import re as _re
-        block = self._subtitle.blocks[row]
-        new_text = item.text()
-        block.content = new_text
-        block.clean_content = _re.sub(r"[\s.,:_-]", "", new_text)
+
+        col = item.column()
+
+        if col == 1:
+            # Timestamp cell — parse "HH:MM:SS,mmm → HH:MM:SS,mmm"
+            from core.subtitle import time_string_to_timedelta
+            text = item.text().strip()
+            parts = [p.strip() for p in text.split("→")]
+            if len(parts) != 2:
+                # Restore original value on bad input
+                block = self._subtitle.blocks[row]
+                self._edit_table.blockSignals(True)
+                item.setText(f"{block.start} → {block.end}")
+                self._edit_table.blockSignals(False)
+                return
+            try:
+                start = time_string_to_timedelta(parts[0])
+                end   = time_string_to_timedelta(parts[1])
+            except (ValueError, IndexError):
+                block = self._subtitle.blocks[row]
+                self._edit_table.blockSignals(True)
+                item.setText(f"{block.start} → {block.end}")
+                self._edit_table.blockSignals(False)
+                return
+            block = self._subtitle.blocks[row]
+            block.start = start
+            block.end   = end
+
+        elif col == 2:
+            import re as _re
+            block = self._subtitle.blocks[row]
+            new_text = item.text()
+            block.content = new_text
+            block.clean_content = _re.sub(r"[\s.,:_-]", "", new_text)
 
     def _build_subtitle(self, result: TranscribeResult):
         """Assemble a ParsedSubtitle from TranscribeResult via a synthetic SRT."""

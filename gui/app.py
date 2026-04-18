@@ -391,9 +391,14 @@ class DropZone(QFrame):
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet(f"font-size: 18pt; color: {FG2};")
 
-        msg = QLabel(STRINGS["sf_drop_label"] + "\n" + STRINGS["sf_drop_formats"])
+        msg = QLabel(STRINGS["sf_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt; line-height: 1.8;")
+        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+
+        fmt = QLabel(STRINGS["sf_drop_formats"])
+        fmt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fmt.setWordWrap(True)
+        fmt.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
 
         browse = QPushButton(STRINGS["sf_browse"])
         browse.setMaximumWidth(100)
@@ -402,12 +407,13 @@ class DropZone(QFrame):
 
         layout.addWidget(icon)
         layout.addWidget(msg)
+        layout.addWidget(fmt)
         layout.addWidget(browse, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _browse(self):
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Open Subtitle Files", "",
-            "Subtitle Files (*.srt *.ass *.ssa *.vtt);;All Files (*)"
+            "Subtitle Files (*.srt *.ass *.ssa *.vtt *.ttml *.sami *.smi *.sub);;All Files (*)"
         )
         if paths:
             self.files_dropped.emit([Path(p) for p in paths])
@@ -741,7 +747,12 @@ class MainWindow(QMainWindow):
         self._transcribe_panel = TranscribePanel()
         self._tabs.addTab(self._transcribe_panel, STRINGS["tab_transcribe"])
 
-        # Tab 7: Regex profile editor
+        # Tab 7: Convert Format
+        from .convert_format_panel import ConvertFormatPanel
+        self._convert_format_panel = ConvertFormatPanel()
+        self._tabs.addTab(self._convert_format_panel, STRINGS["tab_convert_format"])
+
+        # Tab 8: Regex profile editor
         from .regex_editor import RegexEditorPanel
         self._regex_editor = RegexEditorPanel()
         self._tabs.addTab(self._regex_editor, STRINGS["tab_regex_editor"])
@@ -778,6 +789,7 @@ class MainWindow(QMainWindow):
         self._video_panel.status_updated.connect(self._on_panel_status)
         self._image_subs_panel.status_updated.connect(self._on_panel_status)
         self._transcribe_panel.status_updated.connect(self._on_panel_status)
+        self._convert_format_panel.status_updated.connect(self._on_panel_status)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
         # Scan elapsed timer wiring
