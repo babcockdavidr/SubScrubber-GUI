@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QTextBrowser, QProgressBar, QFileDialog, QFrame, QSplitter,
     QTreeWidget, QTreeWidgetItem, QMessageBox, QSlider,
     QDialog, QDialogButtonBox, QCheckBox, QLineEdit, QGroupBox,
-    QSizePolicy, QApplication,
+    QSizePolicy, QApplication, QStackedWidget, QTableWidget,
+    QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 
 import sys
@@ -316,7 +317,7 @@ class VideoScanWorker(QThread):
         from core.ffprobe import VideoScanResult
 
         total = len(self.paths)
-        results_map: dict = {}  # original index -> VideoScanResult
+        results_map: dict = {}
         done_count = 0
         done_lock = threading.Lock()
 
@@ -331,34 +332,61 @@ class VideoScanWorker(QThread):
                 result.error = f"unhandled error: {e}"
             return i, result
 
-        # Cap file-level workers at 2: each scan_video call already uses up to
-        # 4 threads internally for track extraction, so 2 files x 4 tracks = 8
-        # concurrent ffmpeg processes at peak — reasonable without thrashing disk.
-        n_workers = min(2, total) if total > 0 else 1
+        # Submit work incrementally — only keep n_workers futures in-flight at
+        # a time. Submitting all files at once lets slow files back up the
+        # executor's internal queue and causes throughput collapse mid-scan.
+        n_workers = min(4, total) if total > 0 else 1
+        path_iter = enumerate(self.paths)
+        pending: dict = {}   # future -> index, only in-flight futures
+        cancelled = False
+
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
-            futures = {
-                pool.submit(_scan_one, (i, path)): i
-                for i, path in enumerate(self.paths)
-            }
-            for fut in as_completed(futures):
-                i, result = fut.result()
-                with done_lock:
-                    done_count += 1
-                    count_snap = done_count
+            # Seed the pool with the first n_workers files
+            for i, path in path_iter:
+                pending[pool.submit(_scan_one, (i, path))] = i
+                if len(pending) >= n_workers:
+                    break
 
-                if result is None:
-                    # Cancelled — drain remaining and emit partial in original order
-                    for f in futures:
-                        f.cancel()
-                    ordered = [results_map[k] for k in sorted(results_map)]
-                    self.cancelled.emit(ordered)
-                    return
+            while pending:
+                # Wait for the next future to complete
+                for fut in as_completed(pending):
+                    i = pending.pop(fut)
 
-                results_map[i] = result
-                self.progress.emit(count_snap, total, result.path.name)
+                    if self._stop.is_set():
+                        for f in pending:
+                            f.cancel()
+                        ordered = [results_map[k] for k in sorted(results_map)]
+                        self.cancelled.emit(ordered)
+                        cancelled = True
+                        break
 
-        ordered = [results_map[k] for k in sorted(results_map)]
-        self.finished.emit(ordered)
+                    try:
+                        _, result = fut.result()
+                    except Exception as e:
+                        result = VideoScanResult(path=self.paths[i])
+                        result.error = f"unhandled error: {e}"
+
+                    results_map[i] = result
+                    with done_lock:
+                        done_count += 1
+                        count_snap = done_count
+                    self.progress.emit(count_snap, total, result.path.name)
+
+                    # Slot is free — submit the next file immediately
+                    try:
+                        ni, npath = next(path_iter)
+                        pending[pool.submit(_scan_one, (ni, npath))] = ni
+                    except StopIteration:
+                        pass
+
+                    break  # re-enter as_completed loop with updated pending set
+
+                if cancelled:
+                    break
+
+        if not cancelled:
+            ordered = [results_map[k] for k in sorted(results_map)]
+            self.finished.emit(ordered)
 
 
 class RemuxWorker(QThread):
@@ -393,7 +421,11 @@ class RemuxWorker(QThread):
                 self.status_update.emit(f"  Warning: track {track.track_num} — {err}")
                 continue
             cleaned.append(ct)
-        if not cleaned:
+        # If tracks_to_clean was non-empty but all failed, bail out.
+        # If tracks_to_clean was empty (deletion-only remux), proceed —
+        # all_tracks already has deleted tracks filtered out, so remux_video
+        # will rebuild the file with only the remaining tracks.
+        if not cleaned and self.tracks_to_clean:
             self.finished.emit(RemuxResult(
                 success=False, error="No tracks were successfully cleaned."))
             return
@@ -456,7 +488,7 @@ class RemuxProgressDialog(QDialog):
 class VideoSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Video Scan Settings")
+        self.setWindowTitle("Embedded Subs Settings")
         self.setMinimumWidth(520)
         self.setStyleSheet(f"QDialog {{ background: {BG}; color: {FG}; }}")
         layout = QVBoxLayout(self)
@@ -596,6 +628,8 @@ class VideoDropZone(QFrame):
 class VideoScanPanel(QWidget):
     open_in_image_subs = pyqtSignal(Path)
     status_updated     = pyqtSignal(str)
+    scan_started       = pyqtSignal()
+    scan_finished      = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -605,6 +639,7 @@ class VideoScanPanel(QWidget):
         self._last_folder:  str = ""
         self._threshold: int = load_default_sensitivity()
         self._checked_tracks: Dict = {}
+        self._tracks_to_delete: Dict = {}   # (id(result), track_num) -> (result, track)
         self._current_result: Optional[VideoScanResult] = None
         self._current_track:  Optional[SubtitleTrack]   = None
         self._status_text: str = STRINGS["video_status_begin"]
@@ -708,9 +743,14 @@ class VideoScanPanel(QWidget):
         lbl_tree.setObjectName("section_label")
 
         self._tree = QTreeWidget()
+        self._tree.setColumnCount(2)
         self._tree.setHeaderHidden(True)
         self._tree.setFont(QFont("Consolas", 11))
         self._tree.setIndentation(16)
+        self._tree.header().setStretchLastSection(False)
+        self._tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self._tree.setColumnWidth(1, 36)
 
         self._lbl_selected = QLabel(STRINGS["video_lbl_selected"])
         self._lbl_selected.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
@@ -759,15 +799,75 @@ class VideoScanPanel(QWidget):
         self._btn_open_image_subs.setToolTip(STRINGS["tip_video_open_image_subs"])
         self._btn_open_image_subs.clicked.connect(self._open_current_in_image_subs)
 
+        # "Mark for Deletion" button — shown when any track is selected, allows
+        # marking it to be excluded from the video on the next remux
+        self._btn_mark_delete = QPushButton(STRINGS["video_btn_mark_delete"])
+        self._btn_mark_delete.setObjectName("btn_save")
+        self._btn_mark_delete.setVisible(False)
+        self._btn_mark_delete.setToolTip(STRINGS["tip_video_mark_delete"])
+        self._btn_mark_delete.clicked.connect(self._toggle_track_deletion)
+
+        self._detail_stack = QStackedWidget()
+
+        # Page 0 — HTML report (default)
         self._detail_text = QTextBrowser()
         self._detail_text.setFont(QFont("Consolas", 11))
         self._detail_text.setOpenExternalLinks(False)
         self._detail_text.setStyleSheet(
             f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; border-radius: 4px;"
         )
+        self._detail_stack.addWidget(self._detail_text)   # index 0
+
+        # Page 1 — Inline edit table (shown when a scanned text track is selected)
+        self._edit_table = QTableWidget()
+        self._edit_table.setColumnCount(3)
+        self._edit_table.setHorizontalHeaderLabels(
+            [STRINGS["tr_col_index"], STRINGS["tr_col_timestamp"], STRINGS["tr_col_text"]]
+        )
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch)
+        self._edit_table.setColumnWidth(0, 42)
+        self._edit_table.setColumnWidth(1, 210)
+        self._edit_table.verticalHeader().setVisible(False)
+        self._edit_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self._edit_table.setAlternatingRowColors(True)
+        self._edit_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked |
+            QAbstractItemView.EditTrigger.SelectedClicked |
+            QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self._edit_table.setStyleSheet(
+            f"QTableWidget {{ background: {BG2}; color: {FG}; "
+            f"border: 1px solid {BORDER}; border-radius: 4px; }}"
+            f"QTableWidget::item {{ padding: 3px 6px; }}"
+            f"QTableWidget::item:selected {{ background: #2a3f5f; color: #ffffff; }}"
+            f"QHeaderView::section {{ background: {BG2}; color: {FG2}; "
+            f"border: none; border-bottom: 1px solid {BORDER}; "
+            f"padding: 4px 6px; font-size: 9pt; }}"
+        )
+        self._edit_table.itemChanged.connect(self._on_cell_edited)
+        self._detail_stack.addWidget(self._edit_table)    # index 1
+
+        self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
+        self._lbl_edit_hint.setStyleSheet(
+            f"color: {FG2}; font-size: 9pt; font-style: italic; padding: 2px 0;"
+        )
+        self._lbl_edit_hint.setWordWrap(True)
+        self._lbl_edit_hint.setVisible(False)
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self._btn_open_image_subs)
+        btn_row.addWidget(self._btn_mark_delete)
+        btn_row.addStretch()
         rl.addWidget(lbl_detail)
-        rl.addWidget(self._btn_open_image_subs)
-        rl.addWidget(self._detail_text)
+        rl.addLayout(btn_row)
+        rl.addWidget(self._detail_stack, stretch=1)
+        rl.addWidget(self._lbl_edit_hint)
 
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -871,6 +971,11 @@ class VideoScanPanel(QWidget):
         self._current_track  = None
         self._tree.clear()
         self._detail_text.clear()
+        self._edit_table.setRowCount(0)
+        self._detail_stack.setCurrentIndex(0)
+        self._lbl_edit_hint.setVisible(False)
+        self._tracks_to_delete.clear()
+        self._btn_mark_delete.setVisible(False)
         self._btn_remux.setEnabled(False)
         self._btn_extract.setEnabled(False)
         self._lbl_selected.setText(STRINGS["video_lbl_selected"])
@@ -964,6 +1069,7 @@ class VideoScanPanel(QWidget):
         self._worker.finished.connect(self._on_scan_done)
         self._worker.cancelled.connect(self._on_scan_cancelled)
         self._worker.start()
+        self.scan_started.emit()
 
     def _stop_scan(self):
         if self._worker and self._worker.isRunning():
@@ -975,6 +1081,7 @@ class VideoScanPanel(QWidget):
         self._progress.setVisible(False)
         self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
+        self.scan_finished.emit()
 
         if results:
             self._results = results
@@ -993,6 +1100,7 @@ class VideoScanPanel(QWidget):
         self._progress.setVisible(False)
         self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
+        self.scan_finished.emit()
         self._populate_tree(results)
         total_ads = sum(t.ads_at_threshold(self._threshold)
                         for r in results for t in r.tracks)
@@ -1054,9 +1162,61 @@ class VideoScanPanel(QWidget):
                              has_opts)):
                         track_item.setCheckState(0, Qt.CheckState.Unchecked)
                     root_item.addChild(track_item)
+                    # Inline delete button in column 1
+                    self._add_delete_btn(track_item, result, track)
             self._tree.addTopLevelItem(root_item)
             root_item.setExpanded(True)
         self._tree.blockSignals(False)
+
+    def _add_delete_btn(self, item: QTreeWidgetItem,
+                        result: VideoScanResult,
+                        track: SubtitleTrack) -> None:
+        """Add the inline ✕ delete-toggle button to column 1 of a track item."""
+        key = (id(result), track.track_num)
+        marked = key in self._tracks_to_delete
+
+        btn = QPushButton("✕")
+        btn.setFixedSize(26, 20)
+        btn.setCheckable(True)
+        btn.setChecked(marked)
+        btn.setToolTip(STRINGS["tip_video_mark_delete"])
+        btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {FG2}; border: none; "
+            f"font-size: 11pt; padding: 0; }}"
+            f"QPushButton:hover {{ color: {RED}; }}"
+            f"QPushButton:checked {{ color: {RED}; font-weight: bold; }}"
+        )
+
+        def _on_clicked(checked, r=result, t=track, i=item):
+            k = (id(r), t.track_num)
+            if checked:
+                self._tracks_to_delete[k] = (r, t)
+                i.setForeground(0, QColor("#888888"))
+                i.setText(0, f"✗  {t.display_name}  [will be deleted]")
+            else:
+                self._tracks_to_delete.pop(k, None)
+                status = t.status_at_threshold(self._threshold)
+                tc = STATUS_COLORS.get(status, FG2)
+                icon = {"ADS":"✕","WARN":"⚠","CLEAN":"✓","IMAGE":"◻"}.get(status,"·")
+                i.setForeground(0, QColor(tc))
+                i.setText(0, f"{icon}  {t.display_name}")
+            # Update detail pane button label if this track is currently selected
+            if self._current_track and self._current_track.track_num == t.track_num:
+                self._btn_mark_delete.setText(
+                    STRINGS["video_btn_unmark_delete"] if checked
+                    else STRINGS["video_btn_mark_delete"]
+                )
+            # Refresh remux button state
+            self._refresh_remux_button()
+
+        btn.clicked.connect(_on_clicked)
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        hl = QHBoxLayout(container)
+        hl.setContentsMargins(2, 0, 4, 0)
+        hl.addStretch()
+        hl.addWidget(btn)
+        self._tree.setItemWidget(item, 1, container)
 
     def _on_item_checked(self, item, column):
         data = item.data(0, Qt.ItemDataRole.UserRole)
@@ -1073,29 +1233,42 @@ class VideoScanPanel(QWidget):
 
     def _refresh_remux_button(self):
         n = len(self._checked_tracks)
-        if n == 0:
-            self._lbl_selected.setText("Check boxes on flagged tracks to select for cleaning")
+        d = len(self._tracks_to_delete)
+
+        if n == 0 and d == 0:
+            self._lbl_selected.setText(STRINGS["video_lbl_selected"])
             self._btn_remux.setEnabled(False)
+            self._btn_remux.setText(STRINGS["video_btn_remux"])
             self._btn_extract.setEnabled(False)
             return
-        mkv_count = sum(
-            1 for r, _ in self._checked_tracks.values()
-            if r.path.suffix.lower() == ".mkv"
+
+        # Count by format across both cleaned and deletion-marked tracks
+        all_relevant = (
+            list(self._checked_tracks.values()) +
+            list(self._tracks_to_delete.values())
         )
-        mp4_count = sum(
-            1 for r, _ in self._checked_tracks.values()
-            if r.path.suffix.lower() in (".mp4", ".m4v")
-        )
-        remuxable = mkv_count + mp4_count
-        self._lbl_selected.setText(
-            f"{n} track(s) selected  ·  "
-            f"{mkv_count} MKV  ·  {mp4_count} MP4  ·  "
-            f"{n - remuxable} other (extract only)"
-        )
+        # Deduplicate by video path so we count each video once
+        videos_involved = {r.path: r for r, _ in all_relevant}
+        mkv_count = sum(1 for p in videos_involved if p.suffix.lower() == ".mkv")
+        mp4_count = sum(1 for p in videos_involved if p.suffix.lower() in (".mp4", ".m4v"))
+
+        parts = []
+        if n:
+            parts.append(f"{n} track(s) to clean")
+        if d:
+            parts.append(f"{d} track(s) to delete")
+        self._lbl_selected.setText("  ·  ".join(parts))
+
         self._btn_extract.setEnabled(ffmpeg_available() and n > 0)
-        # MKV needs mkvmerge; MP4 only needs ffmpeg (already required)
-        can_remux = (mkv_count > 0 and mkvmerge_available()) or                     (mp4_count > 0 and ffmpeg_available())
+        # Remux is needed for both cleaning and deletion
+        can_remux = (mkv_count > 0 and mkvmerge_available()) or \
+                    (mp4_count > 0 and ffmpeg_available())
         self._btn_remux.setEnabled(can_remux)
+        # Update button label with video count
+        total_videos = len(videos_involved)
+        btn_label = (STRINGS["video_btn_remux"] + f" ({total_videos})"
+                     if total_videos > 1 else STRINGS["video_btn_remux"])
+        self._btn_remux.setText(btn_label)
 
     # ── Detail pane ───────────────────────────────────────────────────
 
@@ -1109,21 +1282,141 @@ class VideoScanPanel(QWidget):
             self._current_result = data[1]
             self._current_track  = None
             self._detail_text.setHtml(_video_html(data[1], self._threshold))
+            self._detail_stack.setCurrentIndex(0)
+            self._lbl_edit_hint.setVisible(False)
             # Show button if this video has any image tracks
             has_image = any(t.is_image for t in data[1].tracks)
             self._btn_open_image_subs.setVisible(has_image)
+            self._btn_mark_delete.setVisible(False)
         elif data[0] == "track":
             self._current_result = data[1]
             self._current_track  = data[2]
+            track = data[2]
             self._detail_text.setHtml(
-                _track_html(data[1], data[2], self._threshold)
+                _track_html(data[1], track, self._threshold)
             )
             # Show button whenever the selected track is image-based
-            self._btn_open_image_subs.setVisible(data[2].is_image)
+            self._btn_open_image_subs.setVisible(track.is_image)
+            # Switch to edit table if the track has been scanned and has text
+            if track.is_text and track.subtitle and track.subtitle.blocks:
+                self._populate_edit_table(track)
+            else:
+                self._detail_stack.setCurrentIndex(0)
+                self._lbl_edit_hint.setVisible(False)
+            # Show delete button and update its label based on current state
+            key = (id(data[1]), track.track_num)
+            is_marked = key in self._tracks_to_delete
+            self._btn_mark_delete.setText(
+                STRINGS["video_btn_unmark_delete"] if is_marked
+                else STRINGS["video_btn_mark_delete"]
+            )
+            self._btn_mark_delete.setVisible(True)
+
+    def _populate_edit_table(self, track):
+        """Fill the edit table from a scanned track's subtitle blocks."""
+        import re as _re
+        blocks = track.subtitle.blocks
+        self._edit_table.blockSignals(True)
+        self._edit_table.setRowCount(len(blocks))
+        for row, block in enumerate(blocks):
+            idx_item = QTableWidgetItem(str(getattr(block, 'original_index', row + 1)))
+            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            idx_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            idx_item.setForeground(QColor(FG2))
+            self._edit_table.setItem(row, 0, idx_item)
+
+            ts = f"{block.start} → {block.end}"
+            ts_item = QTableWidgetItem(ts)
+            ts_item.setFlags(ts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            ts_item.setForeground(QColor("#7dcfff"))
+            self._edit_table.setItem(row, 1, ts_item)
+
+            txt_item = QTableWidgetItem(block.content)
+            self._edit_table.setItem(row, 2, txt_item)
+
+        self._edit_table.resizeRowsToContents()
+        self._edit_table.blockSignals(False)
+        self._detail_stack.setCurrentIndex(1)
+        self._lbl_edit_hint.setVisible(True)
+
+    def _on_cell_edited(self, item: QTableWidgetItem):
+        """Sync an edited text cell back to the subtitle data model."""
+        import re as _re
+        if item.column() != 2:
+            return
+        if not self._current_track or not self._current_track.subtitle:
+            return
+        row = item.row()
+        blocks = self._current_track.subtitle.blocks
+        if row < 0 or row >= len(blocks):
+            return
+        block = blocks[row]
+        new_text = item.text()
+        block.content = new_text
+        block.clean_content = _re.sub(r"[\s.,:_-]", "", new_text)
 
     def _open_current_in_image_subs(self):
         if self._current_result:
             self.open_in_image_subs.emit(self._current_result.path)
+
+    def _toggle_track_deletion(self):
+        """Toggle the current track's deletion-marked state (from detail pane button).
+        Also syncs the inline ✕ button in the tree."""
+        if not self._current_result or not self._current_track:
+            return
+        key = (id(self._current_result), self._current_track.track_num)
+        marked = key not in self._tracks_to_delete  # toggling to this state
+        if marked:
+            self._tracks_to_delete[key] = (self._current_result, self._current_track)
+        else:
+            self._tracks_to_delete.pop(key, None)
+        self._btn_mark_delete.setText(
+            STRINGS["video_btn_unmark_delete"] if marked
+            else STRINGS["video_btn_mark_delete"]
+        )
+        self._update_tree_item_deletion(self._current_track, marked=marked)
+        # Sync the inline ✕ button in the tree
+        self._sync_delete_btn_in_tree(self._current_track, marked)
+        # Refresh remux button state
+        self._refresh_remux_button()
+
+    def _sync_delete_btn_in_tree(self, track: SubtitleTrack, marked: bool):
+        """Sync the inline ✕ button checked state after a toggle from the detail pane."""
+        for i in range(self._tree.topLevelItemCount()):
+            root = self._tree.topLevelItem(i)
+            for j in range(root.childCount()):
+                child = root.child(j)
+                data = child.data(0, Qt.ItemDataRole.UserRole)
+                if data and data[0] == "track" and data[2].track_num == track.track_num:
+                    w = self._tree.itemWidget(child, 1)
+                    if w:
+                        btn = w.findChild(QPushButton)
+                        if btn:
+                            btn.blockSignals(True)
+                            btn.setChecked(marked)
+                            btn.blockSignals(False)
+                    return
+
+    def _update_tree_item_deletion(self, track: SubtitleTrack, marked: bool):
+        """Update the tree item visual for a track marked/unmarked for deletion."""
+        for i in range(self._tree.topLevelItemCount()):
+            root = self._tree.topLevelItem(i)
+            for j in range(root.childCount()):
+                child = root.child(j)
+                data = child.data(0, Qt.ItemDataRole.UserRole)
+                if data and data[0] == "track" and data[2].track_num == track.track_num:
+                    if marked:
+                        child.setForeground(0, QColor("#888888"))
+                        child.setText(0, f"✗  {track.display_name}  [marked for deletion]")
+                    else:
+                        # Restore original color based on track status
+                        status = track.status_at_threshold(self._threshold)
+                        tc = STATUS_COLORS.get(status, FG2)
+                        icon = {"ADS":"✕","WARN":"⚠","CLEAN":"✓","IMAGE":"◻"}.get(status,"·")
+                        child.setForeground(0, QColor(tc))
+                        child.setText(0, f"{icon}  {track.display_name}")
+                    return
 
     def _on_detail_link(self, url):
         """Handle 'keep:block_id' links from the detail pane."""
@@ -1137,7 +1430,7 @@ class VideoScanPanel(QWidget):
                 if id(b) == block_id:
                     b._kept = not getattr(b, '_kept', False)
                     break
-        # Refresh detail pane
+        # Refresh the HTML report (page 0) — edit table (page 1) is unaffected
         if self._current_result and self._current_track:
             self._detail_text.setHtml(
                 _track_html(self._current_result, self._current_track,
@@ -1183,39 +1476,77 @@ class VideoScanPanel(QWidget):
     # ── Clean & Remux ─────────────────────────────────────────────────
 
     def _remux_selected(self):
-        if not self._checked_tracks:
-            return
-        if not mkvmerge_available():
-            QMessageBox.warning(self, STRINGS["dlg_mkvmerge_missing"], STRINGS["dlg_mkvmerge_missing_msg"])
+        if not self._checked_tracks and not self._tracks_to_delete:
             return
 
+        # Build by_video from BOTH cleaning selections and deletion marks.
+        # Each entry: path -> (result, [tracks_to_clean])
+        # Deletion marks are applied separately via filtered_all_tracks below.
         by_video: Dict[Path, tuple] = {}
         skipped = []
+
         for result, track in self._checked_tracks.values():
             suffix = result.path.suffix.lower()
-            if suffix == ".mkv" and not mkvmerge_available():
-                skipped.append(f"{result.path.name} (MKV — mkvmerge not found)")
-                continue
             if suffix not in (".mkv", ".mp4", ".m4v"):
                 skipped.append(f"{result.path.name} (unsupported format: {suffix})")
+                continue
+            if suffix == ".mkv" and not mkvmerge_available():
+                skipped.append(f"{result.path.name} (MKV — mkvmerge not found)")
                 continue
             if result.path not in by_video:
                 by_video[result.path] = (result, [])
             by_video[result.path][1].append(track)
+
+        # Also include videos that only have deletion marks (no tracks to clean)
+        for (rid, tnum), (res, trk) in self._tracks_to_delete.items():
+            suffix = res.path.suffix.lower()
+            if suffix not in (".mkv", ".mp4", ".m4v"):
+                if res.path not in by_video:
+                    skipped.append(f"{res.path.name} (unsupported format: {suffix})")
+                continue
+            if suffix == ".mkv" and not mkvmerge_available():
+                if res.path not in by_video:
+                    skipped.append(f"{res.path.name} (MKV — mkvmerge not found)")
+                continue
+            if res.path not in by_video:
+                by_video[res.path] = (res, [])   # empty clean list — deletion only
 
         if skipped and not by_video:
             QMessageBox.warning(self, "Nothing to remux",
                                 "No supported files selected.\n\n" + "\n".join(skipped))
             return
 
-        track_count = sum(len(tracks) for _, tracks in by_video.values())
-        backup_note = ("A backup file will be created for each video."
+        # Collect deletions per video
+        deletions_by_video: Dict[Path, list] = {}
+        for (rid, tnum), (res, trk) in self._tracks_to_delete.items():
+            if res.path in by_video:
+                deletions_by_video.setdefault(res.path, []).append(trk)
+
+        # Build confirmation summary
+        clean_count = sum(len(tracks) for _, tracks in by_video.values())
+        del_count   = sum(len(trks) for trks in deletions_by_video.values())
+        backup_note = (STRINGS["video_remux_backup_note"]
                        if self._chk_backup.isChecked()
-                       else "The original file will be OVERWRITTEN with no backup.")
+                       else STRINGS["video_remux_overwrite_note"])
+
+        summary_parts = []
+        if clean_count:
+            summary_parts.append(f"{clean_count} track(s) to clean")
+        if del_count:
+            summary_parts.append(f"{del_count} track(s) to delete")
+
+        del_detail = ""
+        if deletions_by_video:
+            lines = []
+            for vpath, trks in deletions_by_video.items():
+                for t in trks:
+                    lines.append(f"  • {vpath.name} — {t.display_name}")
+            del_detail = "\n\nTracks to DELETE:\n" + "\n".join(lines)
+
         answer = QMessageBox.question(
             self, "Confirm Clean & Remux",
-            f"Clean and remux {track_count} track(s) across {len(by_video)} video file(s).\n\n"
-            f"{backup_note}\n\nContinue?",
+            f"{', '.join(summary_parts)} across {len(by_video)} video file(s)."
+            f"{del_detail}\n\n{backup_note}\n\nContinue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if answer != QMessageBox.StandardButton.Yes:
@@ -1224,11 +1555,17 @@ class VideoScanPanel(QWidget):
         errors = []
         successes = 0
         for video_path, (result, tracks) in by_video.items():
+            delete_nums = {
+                t.track_num for t in deletions_by_video.get(video_path, [])
+            }
+            filtered_all_tracks = [
+                t for t in result.tracks if t.track_num not in delete_nums
+            ]
             prog_dlg = RemuxProgressDialog(self)
             prog_dlg.show()
             self._remux_worker = RemuxWorker(
                 video_path=video_path,
-                all_tracks=result.tracks,
+                all_tracks=filtered_all_tracks,
                 tracks_to_clean=tracks,
                 make_backup=self._chk_backup.isChecked(),
                 remove_warnings=self._chk_warnings.isChecked(),
@@ -1253,14 +1590,15 @@ class VideoScanPanel(QWidget):
         if errors:
             QMessageBox.warning(self, "Some remuxes failed",
                                 f"{successes} succeeded.\n\n" + "\n".join(errors))
-        else:
             QMessageBox.information(
                 self, "Done",
-                f"{successes} MKV file(s) cleaned and remuxed successfully."
+                f"{successes} video file(s) remuxed successfully."
             )
 
-        # Clear checkboxes
+        # Clear checkboxes and deletion marks
         self._checked_tracks.clear()
+        self._tracks_to_delete.clear()
+        self._btn_mark_delete.setVisible(False)
         self._tree.blockSignals(True)
         for i in range(self._tree.topLevelItemCount()):
             root = self._tree.topLevelItem(i)

@@ -84,10 +84,8 @@ class BatchWorker(QThread):
 
     def run(self):
         import time
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from core.batch import FileResult, BatchResult
-        from core.subtitle import load_subtitle
-        from core.cleaner import analyze as _analyze
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        from core.batch import FileResult, BatchResult, _scan_file
 
         t0 = time.time()
         total = len(self.paths)
@@ -95,42 +93,33 @@ class BatchWorker(QThread):
         done_count = 0
         done_lock = threading.Lock()
 
-        def _scan_one(i_path):
-            i, path = i_path
-            # Check cancel before doing any work
-            if self._stop.is_set():
-                return i, None
-            fr = FileResult(path=path)
-            try:
-                sub = load_subtitle(path)
-                _analyze(sub)
-                fr.subtitle = sub
-                fr.total_blocks = len(sub.blocks)
-                fr.ad_count = sum(1 for b in sub.blocks if b.is_ad)
-                fr.warning_count = sum(1 for b in sub.blocks if b.is_warning)
-            except Exception as e:
-                fr.error = str(e)
-            return i, fr
-
         n_workers = min(4, total) if total > 0 else 1
-        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            # Submit all paths as (index, path) pairs. The worker function is
+            # top-level in core.batch so it is picklable on Windows (spawn).
             futures = {
-                pool.submit(_scan_one, (i, path)): i
+                pool.submit(_scan_file, path): i
                 for i, path in enumerate(self.paths)
             }
             for fut in as_completed(futures):
-                i, fr = fut.result()
-                with done_lock:
-                    done_count += 1
-                    count_snap = done_count
+                i = futures[fut]
 
-                if fr is None:
-                    # Task was cancelled — drain remaining futures and emit partial
+                if self._stop.is_set():
+                    # Cancel any pending futures and emit whatever we have so far
                     for f in futures:
                         f.cancel()
                     ordered = [results_map[k] for k in sorted(results_map)]
                     self.cancelled.emit(BatchResult(results=ordered, elapsed=time.time() - t0))
                     return
+
+                try:
+                    fr = fut.result()
+                except Exception as e:
+                    fr = FileResult(path=self.paths[i], error=str(e))
+
+                with done_lock:
+                    done_count += 1
+                    count_snap = done_count
 
                 results_map[i] = fr
                 self.progress.emit(count_snap, total, fr.path.name)
@@ -167,6 +156,8 @@ class NumericTableItem(QTableWidgetItem):
 class BatchPanel(QWidget):
     open_file_requested = pyqtSignal(Path)
     status_updated      = pyqtSignal(str)
+    scan_started        = pyqtSignal()
+    scan_finished       = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -568,6 +559,7 @@ class BatchPanel(QWidget):
         self._worker.finished.connect(self._on_scan_done)
         self._worker.cancelled.connect(self._on_scan_cancelled)
         self._worker.start()
+        self.scan_started.emit()
 
     def _stop_scan(self):
         if self._worker and self._worker.isRunning():
@@ -580,6 +572,7 @@ class BatchPanel(QWidget):
         self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
         self._btn_full_report.setEnabled(bool(result.results))
+        self.scan_finished.emit()
 
         if result.results:
             self._batch_result = result
@@ -604,6 +597,7 @@ class BatchPanel(QWidget):
         self._btn_stop_scan.setVisible(False)
         self._btn_scan.setEnabled(True)
         self._btn_full_report.setEnabled(True)
+        self.scan_finished.emit()
 
         self._result_list.setSortingEnabled(False)
         self._result_list.setRowCount(len(result.results))

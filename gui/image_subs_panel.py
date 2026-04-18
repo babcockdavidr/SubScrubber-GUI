@@ -21,6 +21,8 @@ from PyQt6.QtGui import QColor, QDragEnterEvent, QDropEvent, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextBrowser, QProgressBar, QFileDialog, QFrame, QSplitter,
+    QStackedWidget, QTableWidget, QTableWidgetItem,
+    QHeaderView, QAbstractItemView,
     QTreeWidget, QTreeWidgetItem, QSizePolicy, QCheckBox, QSlider,
 )
 
@@ -449,14 +451,62 @@ class ImageSubsPanel(QWidget):
         rl.setContentsMargins(0, 0, 0, 0)
         lbl_detail = QLabel(STRINGS["img_lbl_detail"])
         lbl_detail.setObjectName("section_label")
+        self._detail_stack = QStackedWidget()
+
+        # Page 0 — HTML report (default)
         self._detail = QTextBrowser()
         self._detail.setOpenLinks(False)
         self._detail.setStyleSheet(
             f"background: {BG2}; border: 1px solid {BORDER}; border-radius: 4px;"
         )
         self._detail.setHtml(_welcome_html())
+        self._detail_stack.addWidget(self._detail)        # index 0
+
+        # Page 1 — Inline edit table (shown after OCR completes)
+        self._edit_table = QTableWidget()
+        self._edit_table.setColumnCount(3)
+        self._edit_table.setHorizontalHeaderLabels(
+            [STRINGS["tr_col_index"], STRINGS["tr_col_timestamp"], STRINGS["tr_col_text"]]
+        )
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Fixed)
+        self._edit_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch)
+        self._edit_table.setColumnWidth(0, 42)
+        self._edit_table.setColumnWidth(1, 210)
+        self._edit_table.verticalHeader().setVisible(False)
+        self._edit_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self._edit_table.setAlternatingRowColors(True)
+        self._edit_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked |
+            QAbstractItemView.EditTrigger.SelectedClicked |
+            QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self._edit_table.setStyleSheet(
+            f"QTableWidget {{ background: {BG2}; color: {FG}; "
+            f"border: 1px solid {BORDER}; border-radius: 4px; }}"
+            f"QTableWidget::item {{ padding: 3px 6px; }}"
+            f"QTableWidget::item:selected {{ background: #2a3f5f; color: #ffffff; }}"
+            f"QHeaderView::section {{ background: {BG2}; color: {FG2}; "
+            f"border: none; border-bottom: 1px solid {BORDER}; "
+            f"padding: 4px 6px; font-size: 9pt; }}"
+        )
+        self._edit_table.itemChanged.connect(self._on_cell_edited)
+        self._detail_stack.addWidget(self._edit_table)    # index 1
+
+        self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
+        self._lbl_edit_hint.setStyleSheet(
+            f"color: {FG2}; font-size: 9pt; font-style: italic; padding: 2px 0;"
+        )
+        self._lbl_edit_hint.setWordWrap(True)
+        self._lbl_edit_hint.setVisible(False)
+
         rl.addWidget(lbl_detail)
-        rl.addWidget(self._detail, stretch=1)
+        rl.addWidget(self._detail_stack, stretch=1)
+        rl.addWidget(self._lbl_edit_hint)
 
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -596,11 +646,60 @@ class ImageSubsPanel(QWidget):
         self._lbl_file.setStyleSheet(f"color: {FG2};")
         self._set_status("Load a video file to begin.")
         self._detail.setHtml(_welcome_html())
+        self._edit_table.setRowCount(0)
+        self._detail_stack.setCurrentIndex(0)
+        self._lbl_edit_hint.setVisible(False)
         self._btn_clear.setEnabled(False)
         self._btn_scan.setEnabled(False)
         self._btn_save_srt.setEnabled(False)
         self._btn_remux.setEnabled(False)
         self._drop_zone.setVisible(True)
+
+    # ── Inline editing ───────────────────────────────────────────────────
+
+    def _populate_edit_table(self, track):
+        """Fill the edit table from a scanned track's subtitle blocks."""
+        import re as _re
+        blocks = track.subtitle.blocks if track.subtitle else []
+        self._edit_table.blockSignals(True)
+        self._edit_table.setRowCount(len(blocks))
+        for row, block in enumerate(blocks):
+            idx_item = QTableWidgetItem(str(getattr(block, 'original_index', row + 1)))
+            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            idx_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            idx_item.setForeground(QColor(FG2))
+            self._edit_table.setItem(row, 0, idx_item)
+
+            ts = f"{block.start} → {block.end}"
+            ts_item = QTableWidgetItem(ts)
+            ts_item.setFlags(ts_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            ts_item.setForeground(QColor("#7dcfff"))
+            self._edit_table.setItem(row, 1, ts_item)
+
+            txt_item = QTableWidgetItem(block.content)
+            self._edit_table.setItem(row, 2, txt_item)
+
+        self._edit_table.resizeRowsToContents()
+        self._edit_table.blockSignals(False)
+        self._detail_stack.setCurrentIndex(1)
+        self._lbl_edit_hint.setVisible(True)
+
+    def _on_cell_edited(self, item: QTableWidgetItem):
+        """Sync an edited text cell back to the subtitle data model."""
+        import re as _re
+        if item.column() != 2:
+            return
+        if not self._current_track or not self._current_track.subtitle:
+            return
+        row = item.row()
+        blocks = self._current_track.subtitle.blocks
+        if row < 0 or row >= len(blocks):
+            return
+        block = blocks[row]
+        new_text = item.text()
+        block.content = new_text
+        block.clean_content = _re.sub(r"[\s.,:_-]", "", new_text)
 
     # ── Track selection ───────────────────────────────────────────────────
 
@@ -619,8 +718,15 @@ class ImageSubsPanel(QWidget):
                 and self._video_path is not None
                 and self._video_path.suffix.lower() in (".mkv", ".mp4", ".m4v")
             )
+            if track.subtitle is not None and track.subtitle.blocks:
+                self._populate_edit_table(track)
+            else:
+                self._detail_stack.setCurrentIndex(0)
+                self._lbl_edit_hint.setVisible(False)
         else:
             self._detail.setHtml(_pre_scan_html(track))
+            self._detail_stack.setCurrentIndex(0)
+            self._lbl_edit_hint.setVisible(False)
 
     # ── Scan ──────────────────────────────────────────────────────────────
 
@@ -654,7 +760,8 @@ class ImageSubsPanel(QWidget):
     def _on_threshold_changed(self, value: int):
         self._threshold = value
         self._lbl_threshold.setText(THRESHOLD_LABELS.get(value, str(value)))
-        # Re-render detail pane if a scanned track is selected
+        # Re-render the HTML report for the current track if scanned.
+        # The edit table (page 1) is unaffected — user edits are preserved.
         if self._current_track and self._current_track.subtitle is not None:
             self._detail.setHtml(_post_scan_html(self._current_track, self._threshold))
         # Recolor ALL scanned tree items at the new threshold
@@ -685,6 +792,8 @@ class ImageSubsPanel(QWidget):
                 and self._video_path is not None
                 and self._video_path.suffix.lower() in (".mkv", ".mp4", ".m4v")
             )
+            if track.subtitle is not None and track.subtitle.blocks:
+                self._populate_edit_table(track)
 
     def _on_scan_finished(self, tracks: List[SubtitleTrack]):
         self._progress.setVisible(False)
@@ -705,6 +814,8 @@ class ImageSubsPanel(QWidget):
                     and self._video_path is not None
                     and self._video_path.suffix.lower() in (".mkv", ".mp4", ".m4v")
                 )
+                if matched.subtitle is not None and matched.subtitle.blocks:
+                    self._populate_edit_table(matched)
 
         scanned  = len(tracks)
         with_ads = sum(1 for t in tracks if t.ad_count > 0)

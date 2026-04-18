@@ -255,7 +255,11 @@ class TranscribePanel(QWidget):
         self._worker:     Optional[TranscribeWorker] = None
         self._status_text: str                       = STRINGS["tr_status_load"]
         self._build_ui()
-        self._check_tools()
+        # Defer the faster-whisper availability check to a background thread.
+        # importing faster_whisper (ctranslate2 + transformers) on a cold process
+        # can take several seconds and would block the UI from appearing.
+        import threading
+        threading.Thread(target=self._check_tools, daemon=True).start()
 
     # ── Build UI ─────────────────────────────────────────────────────────
 
@@ -488,9 +492,17 @@ class TranscribePanel(QWidget):
     # ── Tool check ────────────────────────────────────────────────────────
 
     def _check_tools(self):
-        if not faster_whisper_available():
-            self._whisper_notice.setText(STRINGS["tr_whisper_missing"])
-            self._whisper_notice.setVisible(True)
+        # Runs in a background thread — must not touch Qt widgets directly.
+        # Use QTimer.singleShot(0, ...) to marshal UI updates back to the main thread.
+        available = faster_whisper_available()
+        if not available:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._on_whisper_unavailable)
+
+    def _on_whisper_unavailable(self):
+        """Called on the main thread once the background check completes."""
+        self._whisper_notice.setText(STRINGS["tr_whisper_missing"])
+        self._whisper_notice.setVisible(True)
 
     # ── Model combo ───────────────────────────────────────────────────────
 

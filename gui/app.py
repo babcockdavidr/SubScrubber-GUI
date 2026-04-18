@@ -485,6 +485,19 @@ class MainWindow(QMainWindow):
         )
         self._btn_check_updates.setToolTip(STRINGS["tip_btn_check_updates"])
         self._btn_check_updates.clicked.connect(self._check_for_updates)
+
+        # Scan elapsed timer — hidden until a scan is running
+        self._scan_elapsed_label = QLabel()
+        self._scan_elapsed_label.setStyleSheet(
+            f"color: {ACCENT}; font-size: 9pt; padding-right: 10px; font-family: monospace;"
+        )
+        self._scan_elapsed_label.setVisible(False)
+        self._scan_elapsed_secs = 0
+        self._scan_qtimer = QTimer(self)
+        self._scan_qtimer.setInterval(1000)
+        self._scan_qtimer.timeout.connect(self._on_scan_timer_tick)
+
+        self._status.addPermanentWidget(self._scan_elapsed_label)
         self._status.addPermanentWidget(self._btn_check_updates)
         self._status.addPermanentWidget(self._version_label)
 
@@ -713,7 +726,7 @@ class MainWindow(QMainWindow):
         self._batch_panel = BatchPanel()
         self._tabs.addTab(self._batch_panel, STRINGS["tab_batch"])
 
-        # Tab 4: Video / embedded subtitle scan
+        # Tab 4: Embedded Subs (formerly Video Scan)
         from .video_panel import VideoScanPanel
         self._video_panel = VideoScanPanel()
         self._tabs.addTab(self._video_panel, STRINGS["tab_video_scan"])
@@ -765,6 +778,12 @@ class MainWindow(QMainWindow):
         self._image_subs_panel.status_updated.connect(self._on_panel_status)
         self._transcribe_panel.status_updated.connect(self._on_panel_status)
         self._tabs.currentChanged.connect(self._on_tab_changed)
+
+        # Scan elapsed timer wiring
+        self._batch_panel.scan_started.connect(self._on_scan_started)
+        self._batch_panel.scan_finished.connect(self._on_scan_stopped)
+        self._video_panel.scan_started.connect(self._on_scan_started)
+        self._video_panel.scan_finished.connect(self._on_scan_stopped)
         # Keyboard shortcuts
         QShortcut(QKeySequence("Delete"), self, self._mark_current_as_ad)
         QShortcut(QKeySequence("Space"),  self, self._keep_current)
@@ -797,6 +816,31 @@ class MainWindow(QMainWindow):
             # Switching back to Single File — leave the bar as-is; the last
             # Single File message is still showing.
             pass
+
+
+    # ── Scan elapsed timer ────────────────────────────────────────────────────
+
+    def _on_scan_started(self):
+        self._scan_elapsed_secs = 0
+        self._scan_elapsed_label.setText("⏱ 0:00")
+        self._scan_elapsed_label.setVisible(True)
+        self._scan_qtimer.start()
+
+    def _on_scan_stopped(self):
+        self._scan_qtimer.stop()
+        # Leave the final time visible for 5 seconds so you can read it, then hide.
+        QTimer.singleShot(5000, lambda: self._scan_elapsed_label.setVisible(False))
+
+    def _on_scan_timer_tick(self):
+        self._scan_elapsed_secs += 1
+        s = self._scan_elapsed_secs
+        mins, secs = divmod(s, 60)
+        hrs, mins  = divmod(mins, 60)
+        if hrs:
+            text = f"⏱ {hrs}:{mins:02}:{secs:02}"
+        else:
+            text = f"⏱ {mins}:{secs:02}"
+        self._scan_elapsed_label.setText(text)
 
     # ── Settings ─────────────────────────────────────────────────────────────
 
@@ -1190,7 +1234,7 @@ class MainWindow(QMainWindow):
     def _open_in_image_subs(self, path: Path):
         """Called by video panel — open a video file in the Image Subs tab."""
         self._image_subs_panel.load_video(path)
-        # Image Subs is tab index 4 (0=Single File, 1=Batch, 2=Video Scan... wait,
+        # Image Subs is tab index 4 (0=Single File, 1=Batch, 2=Embedded Subs... wait,
         # use tab widget lookup so index never goes stale)
         for i in range(self._tabs.count()):
             if self._tabs.widget(i) is self._image_subs_panel:
