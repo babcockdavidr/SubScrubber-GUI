@@ -767,6 +767,7 @@ class MainWindow(QMainWindow):
         # Cross-panel wiring
         self._batch_panel.open_file_requested.connect(self._open_file_in_review)
         self._video_panel.open_in_image_subs.connect(self._open_in_image_subs)
+        self._video_panel.open_in_transcribe.connect(self._open_in_transcribe)
         self._regex_editor.pattern_saved.connect(self._on_pattern_saved)
         self._btn_always_ad.clicked.connect(self._always_mark_as_ad)
         self._btn_settings.clicked.connect(self._open_settings)
@@ -1238,6 +1239,14 @@ class MainWindow(QMainWindow):
         # use tab widget lookup so index never goes stale)
         for i in range(self._tabs.count()):
             if self._tabs.widget(i) is self._image_subs_panel:
+                self._tabs.setCurrentIndex(i)
+                break
+
+    def _open_in_transcribe(self, path: Path):
+        """Called by video panel — open a video file in the Transcribe tab."""
+        self._transcribe_panel.load_video(path)
+        for i in range(self._tabs.count()):
+            if self._tabs.widget(i) is self._transcribe_panel:
                 self._tabs.setCurrentIndex(i)
                 break
 

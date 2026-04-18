@@ -26,7 +26,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextBrowser, QProgressBar, QFileDialog, QFrame, QSplitter,
+    QTextBrowser, QProgressBar, QFileDialog, QFrame,
     QComboBox, QCheckBox, QStackedWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView,
 )
@@ -245,7 +245,8 @@ class TranscribeDropZone(QFrame):
 
 class TranscribePanel(QWidget):
     """Transcribe tab — Whisper audio transcription pipeline."""
-    status_updated = pyqtSignal(str)
+    status_updated  = pyqtSignal(str)
+    _subs_warn_ready = pyqtSignal(str)   # emitted from probe thread → main thread
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -255,6 +256,7 @@ class TranscribePanel(QWidget):
         self._worker:     Optional[TranscribeWorker] = None
         self._status_text: str                       = STRINGS["tr_status_load"]
         self._build_ui()
+        self._subs_warn_ready.connect(self._show_subs_warning)
         # Defer the faster-whisper availability check to a background thread.
         # importing faster_whisper (ctranslate2 + transformers) on a cold process
         # can take several seconds and would block the UI from appearing.
@@ -285,6 +287,16 @@ class TranscribePanel(QWidget):
             f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
         )
         self._experimental_notice.setWordWrap(True)
+
+        # Subtitle-already-exists warning — orange, hidden until a file is loaded
+        # and a background probe finds existing tracks or external subtitle files
+        self._subs_warning = QLabel()
+        self._subs_warning.setStyleSheet(
+            f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+        )
+        self._subs_warning.setWordWrap(True)
+        self._subs_warning.setVisible(False)
 
         # ── Top control bar ───────────────────────────────────────────────
         ctrl = QHBoxLayout()
@@ -349,59 +361,7 @@ class TranscribePanel(QWidget):
         self._drop_zone = TranscribeDropZone()
         self._drop_zone.file_dropped.connect(self.load_video)
 
-        # ── Splitter ──────────────────────────────────────────────────────
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # Left: options + bottom action bar
-        left = QWidget()
-        ll = QVBoxLayout(left)
-        ll.setContentsMargins(0, 0, 0, 0)
-        ll.setSpacing(4)
-
-        lbl_opts = QLabel(STRINGS["tr_lbl_options"])
-        lbl_opts.setObjectName("section_label")
-
-        self._chk_sdh = QCheckBox(STRINGS["tr_chk_sdh"])
-        self._chk_sdh.setChecked(True)
-        self._chk_sdh.toggled.connect(self._on_sdh_toggled)
-
-        self._lbl_sdh_warn = QLabel(STRINGS["tr_sdh_warn"])
-        self._lbl_sdh_warn.setWordWrap(True)
-        self._lbl_sdh_warn.setStyleSheet(
-            f"color: {ORANGE}; font-size: 9pt; font-style: italic;"
-        )
-        self._lbl_sdh_warn.setVisible(False)
-
-        ll.addWidget(lbl_opts)
-        ll.addWidget(self._chk_sdh)
-        ll.addWidget(self._lbl_sdh_warn)
-        ll.addStretch()
-
-        action_bar = QHBoxLayout()
-        self._chk_backup = QCheckBox(STRINGS["tr_chk_backup"])
-        self._chk_backup.setChecked(False)
-        self._btn_save_srt = QPushButton(STRINGS["tr_btn_save_srt"])
-        self._btn_save_srt.setObjectName("btn_keep")
-        self._btn_save_srt.setEnabled(False)
-        self._btn_save_srt.setToolTip(STRINGS["tip_tr_save_srt"])
-        self._btn_save_srt.clicked.connect(self._save_srt)
-        self._btn_remux = QPushButton(STRINGS["tr_btn_remux"])
-        self._btn_remux.setObjectName("btn_save")
-        self._btn_remux.setEnabled(False)
-        self._btn_remux.setToolTip(STRINGS["tip_tr_remux"])
-        self._btn_remux.clicked.connect(self._remux)
-        action_bar.addWidget(self._chk_backup)
-        action_bar.addStretch()
-        action_bar.addWidget(self._btn_save_srt)
-        action_bar.addWidget(self._btn_remux)
-        ll.addLayout(action_bar)
-
-        # Right: stacked pane — page 0: HTML browser (idle/progress/error)
-        #                        page 1: editable table (results)
-        right = QWidget()
-        rl = QVBoxLayout(right)
-        rl.setContentsMargins(0, 0, 0, 0)
-        rl.setSpacing(4)
+        # ── Results section (full width) ──────────────────────────────────
         lbl_detail = QLabel(STRINGS["tr_lbl_results"])
         lbl_detail.setObjectName("section_label")
 
@@ -462,21 +422,46 @@ class TranscribePanel(QWidget):
         self._lbl_edit_hint.setWordWrap(True)
         self._lbl_edit_hint.setVisible(False)
 
-        rl.addWidget(lbl_detail)
-        rl.addWidget(self._detail_stack, stretch=1)
-        rl.addWidget(self._lbl_edit_hint)
+        # ── Options bar (below table) ──────────────────────────────────────
+        self._chk_sdh = QCheckBox(STRINGS["tr_chk_sdh"])
+        self._chk_sdh.setChecked(True)
+        self._chk_sdh.setToolTip(STRINGS["tr_sdh_warn"])
+        self._chk_sdh.toggled.connect(self._on_sdh_toggled)
 
-        splitter.addWidget(left)
-        splitter.addWidget(right)
-        splitter.setSizes([260, 740])
+        self._chk_backup = QCheckBox(STRINGS["tr_chk_backup"])
+        self._chk_backup.setChecked(False)
+
+        self._btn_save_srt = QPushButton(STRINGS["tr_btn_save_srt"])
+        self._btn_save_srt.setObjectName("btn_keep")
+        self._btn_save_srt.setEnabled(False)
+        self._btn_save_srt.setToolTip(STRINGS["tip_tr_save_srt"])
+        self._btn_save_srt.clicked.connect(self._save_srt)
+
+        self._btn_remux = QPushButton(STRINGS["tr_btn_remux"])
+        self._btn_remux.setObjectName("btn_save")
+        self._btn_remux.setEnabled(False)
+        self._btn_remux.setToolTip(STRINGS["tip_tr_remux"])
+        self._btn_remux.clicked.connect(self._remux)
+
+        options_bar = QHBoxLayout()
+        options_bar.setContentsMargins(0, 2, 0, 0)
+        options_bar.addWidget(self._chk_sdh)
+        options_bar.addStretch()
+        options_bar.addWidget(self._chk_backup)
+        options_bar.addWidget(self._btn_save_srt)
+        options_bar.addWidget(self._btn_remux)
 
         # ── Assemble root ─────────────────────────────────────────────────
         root.addWidget(self._whisper_notice)
         root.addWidget(self._experimental_notice)
+        root.addWidget(self._subs_warning)
         root.addLayout(ctrl)
         root.addWidget(self._drop_zone)
         root.addWidget(self._progress)
-        root.addWidget(splitter, stretch=1)
+        root.addWidget(lbl_detail)
+        root.addWidget(self._detail_stack, stretch=1)
+        root.addWidget(self._lbl_edit_hint)
+        root.addLayout(options_bar)
 
     # ── Status helper ─────────────────────────────────────────────────────
 
@@ -550,6 +535,59 @@ class TranscribePanel(QWidget):
         self._edit_table.setRowCount(0)
         self._lbl_edit_hint.setVisible(False)
         self._drop_zone.setVisible(False)
+        self._subs_warning.setVisible(False)
+        # Probe for existing subtitle tracks in the background so the UI
+        # doesn't block.  Result is marshalled back to the main thread via
+        # QTimer.singleShot so we never touch widgets from the worker thread.
+        import threading
+        threading.Thread(
+            target=self._probe_for_existing_subs,
+            args=(path,),
+            daemon=True,
+        ).start()
+
+    def _probe_for_existing_subs(self, path: Path):
+        """Background thread — probe video and filesystem for existing subs."""
+        from core.ffprobe import probe_video
+
+        parts = []
+        try:
+            tracks, err = probe_video(path)
+            text_count  = sum(1 for t in tracks if t.is_text)
+            image_count = sum(1 for t in tracks if t.is_image)
+            if text_count:
+                n = text_count
+                parts.append(f"{n} embedded text track{'s' if n != 1 else ''}")
+            if image_count:
+                n = image_count
+                parts.append(f"{n} image-based track{'s' if n != 1 else ''}")
+        except Exception as e:
+            pass
+
+        try:
+            _EXT = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"}
+            stem   = path.stem
+            parent = path.parent
+            has_ext = any((parent / (stem + e)).exists() for e in _EXT)
+            if not has_ext:
+                for f in parent.iterdir():
+                    if f.suffix.lower() in _EXT and f.stem.startswith(stem + "."):
+                        has_ext = True
+                        break
+            if has_ext:
+                parts.append("external subtitle file(s)")
+        except Exception:
+            pass
+
+        if parts and self._video_path == path:
+            detail = ", ".join(parts)
+            msg = STRINGS["tr_subs_warning"].format(detail=detail)
+            self._subs_warn_ready.emit(msg)
+
+    def _show_subs_warning(self, msg: str):
+        """Main-thread slot — show the subtitle warning banner."""
+        self._subs_warning.setText(msg)
+        self._subs_warning.setVisible(True)
 
     def _clear(self):
         self._video_path = None
@@ -568,6 +606,7 @@ class TranscribePanel(QWidget):
         self._edit_table.setRowCount(0)
         self._lbl_edit_hint.setVisible(False)
         self._drop_zone.setVisible(True)
+        self._subs_warning.setVisible(False)
 
     # ── Transcription ─────────────────────────────────────────────────────
 
@@ -731,7 +770,7 @@ class TranscribePanel(QWidget):
     # ── SDH toggle ────────────────────────────────────────────────────────
 
     def _on_sdh_toggled(self, checked: bool):
-        self._lbl_sdh_warn.setVisible(not checked)
+        pass  # Warning now lives as a tooltip on the checkbox itself
 
     # ── Save as .srt ──────────────────────────────────────────────────────
 

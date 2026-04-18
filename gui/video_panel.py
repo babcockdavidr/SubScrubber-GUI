@@ -626,8 +626,9 @@ class VideoDropZone(QFrame):
 # ---------------------------------------------------------------------------
 
 class VideoScanPanel(QWidget):
-    open_in_image_subs = pyqtSignal(Path)
-    status_updated     = pyqtSignal(str)
+    open_in_image_subs  = pyqtSignal(Path)
+    open_in_transcribe  = pyqtSignal(Path)
+    status_updated      = pyqtSignal(str)
     scan_started       = pyqtSignal()
     scan_finished      = pyqtSignal()
 
@@ -799,6 +800,14 @@ class VideoScanPanel(QWidget):
         self._btn_open_image_subs.setToolTip(STRINGS["tip_video_open_image_subs"])
         self._btn_open_image_subs.clicked.connect(self._open_current_in_image_subs)
 
+        # "Open in Transcribe" button — shown at video-row level only when the
+        # video has no subtitle tracks of any kind and no external subtitle file
+        self._btn_open_transcribe = QPushButton(STRINGS["video_btn_open_transcribe"])
+        self._btn_open_transcribe.setObjectName("btn_clean_all")
+        self._btn_open_transcribe.setVisible(False)
+        self._btn_open_transcribe.setToolTip(STRINGS["tip_video_open_transcribe"])
+        self._btn_open_transcribe.clicked.connect(self._open_current_in_transcribe)
+
         # "Mark for Deletion" button — shown when any track is selected, allows
         # marking it to be excluded from the video on the next remux
         self._btn_mark_delete = QPushButton(STRINGS["video_btn_mark_delete"])
@@ -862,6 +871,7 @@ class VideoScanPanel(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.addWidget(self._btn_open_image_subs)
+        btn_row.addWidget(self._btn_open_transcribe)
         btn_row.addWidget(self._btn_mark_delete)
         btn_row.addStretch()
         rl.addWidget(lbl_detail)
@@ -1284,9 +1294,22 @@ class VideoScanPanel(QWidget):
             self._detail_text.setHtml(_video_html(data[1], self._threshold))
             self._detail_stack.setCurrentIndex(0)
             self._lbl_edit_hint.setVisible(False)
-            # Show button if this video has any image tracks
+            # Show Image Subs button if this video has any image tracks
             has_image = any(t.is_image for t in data[1].tracks)
             self._btn_open_image_subs.setVisible(has_image)
+            # Show Transcribe button if the video has NO subtitle tracks of any
+            # kind and no external subtitle file sitting next to it.
+            # Also update the error message in the detail pane and tree label
+            # so videos with external subs show a more informative status.
+            has_any_subs = bool(data[1].tracks)
+            has_external = self._has_external_subtitle(data[1].path)
+            if not has_any_subs and has_external:
+                data[1].error = STRINGS["video_no_embedded_has_external"]
+                current.setText(0, f"✕  {data[1].path.name}  — {data[1].error}")
+                self._detail_text.setHtml(_video_html(data[1], self._threshold))
+            self._btn_open_transcribe.setVisible(
+                not has_any_subs and not has_external
+            )
             self._btn_mark_delete.setVisible(False)
         elif data[0] == "track":
             self._current_result = data[1]
@@ -1297,6 +1320,8 @@ class VideoScanPanel(QWidget):
             )
             # Show button whenever the selected track is image-based
             self._btn_open_image_subs.setVisible(track.is_image)
+            # Transcribe button never shown at track-row level
+            self._btn_open_transcribe.setVisible(False)
             # Switch to edit table if the track has been scanned and has text
             if track.is_text and track.subtitle and track.subtitle.blocks:
                 self._populate_edit_table(track)
@@ -1359,6 +1384,29 @@ class VideoScanPanel(QWidget):
     def _open_current_in_image_subs(self):
         if self._current_result:
             self.open_in_image_subs.emit(self._current_result.path)
+
+    def _open_current_in_transcribe(self):
+        if self._current_result:
+            self.open_in_transcribe.emit(self._current_result.path)
+
+    @staticmethod
+    def _has_external_subtitle(video_path: Path) -> bool:
+        """Return True if any external subtitle file exists next to the video."""
+        _EXT = {".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"}
+        stem = video_path.stem
+        parent = video_path.parent
+        for ext in _EXT:
+            # Exact stem match (e.g. Movie.srt) or stem-prefixed (e.g. Movie.eng.srt)
+            if (parent / (stem + ext)).exists():
+                return True
+        # Also catch stem.*.ext patterns (language-tagged externals)
+        try:
+            for f in parent.iterdir():
+                if f.suffix.lower() in _EXT and f.stem.startswith(stem + "."):
+                    return True
+        except OSError:
+            pass
+        return False
 
     def _toggle_track_deletion(self):
         """Toggle the current track's deletion-marked state (from detail pane button).
