@@ -1,4 +1,4 @@
-# SubForge — v0.15.0: Performance, Rename & Polish
+# SubForge — v0.16.0: Scan Control, Workflow Helpers & Transcribe Redesign
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,18 +10,11 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.15.0 — Performance, Rename & Polish
-- **App startup dramatically faster** — the app previously took up to 10 seconds to open. The culprit was importing `faster-whisper` (and its `ctranslate2` + `transformers` dependencies) synchronously at startup. The check is now deferred to a background thread with a cached result. Startup is near-instant from both source and the frozen executable.
-- **Batch scanning up to ~3.5x faster** — replaced `ThreadPoolExecutor` (GIL-bound for CPU work) with `ProcessPoolExecutor`, so subtitle files are parsed and analyzed in true parallel across up to 4 subprocesses.
-- **Embedded Subs scanning up to ~5x faster** — three compounding improvements: tool path resolution is now cached (previously called `shutil.which` once per track from multiple threads); file-level concurrency raised from 2 to 4; work submission changed from bulk to bounded incremental, preventing throughput collapse mid-scan.
-- **Scan elapsed timer** — a timer appears in the status bar whenever a Batch or Embedded Subs scan is running, showing elapsed time in m:ss format. Stays visible for 5 seconds after the scan completes.
-- **"Video Scan" tab renamed to "Embedded Subs"** — the tab label is updated in all 14 supported languages. Internal code names are unchanged.
-- **Inline editing — Embedded Subs tab** — after scanning, clicking a text track switches the detail pane to an editable table showing every subtitle block. Double-click any text cell to correct it. Edits apply immediately — Save as .srt and Clean & Remux both use the corrected output.
-- **Inline editing — Image Subs tab** — the same editable table appears as soon as OCR completes on a track. Especially useful since OCR output is imperfect by nature.
-- **Track deletion before remux** — every track row in the Embedded Subs tree now has an inline ✕ button. Click it to mark that track for permanent removal from the video on the next remux. The Clean & Remux button shows a count when multiple videos are involved (e.g. "Clean & Remux (4)"). Works alongside cleaning — you can clean some tracks and delete others in the same operation.
-- **About tab tagline updated** — now reads "Clean, scan, and create subtitle files — all in one place, all on your machine." Updated in all 14 languages.
-- **CLI cleaned up** — `python subforge.py --help` is now documented as the CLI entry point. The stale `--gui` flag is removed from examples. A note explains which features are GUI-only.
-- **README updated** — all "Video Scan" references updated to "Embedded Subs" throughout. CLI reference corrected.
+### v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
+- **"Open in Transcribe →" button** — when a video in the Embedded Subs tab has no subtitle tracks of any kind and no external subtitle file sitting next to it, a new button appears in the detail pane. One click loads the video into the Transcribe tab, ready to generate subtitles from its audio. Mirrors the existing "Open in Image Subs →" button.
+- **Subtitle warning banner on Transcribe tab** — when a video is loaded into the Transcribe tab (via drop, Browse, or the new handoff button), SubForge probes it in the background for existing embedded and external subtitle tracks. If any are found, an orange warning banner appears naming exactly what was detected, so you can make an informed decision before transcribing.
+- **Clearer status for videos with external subtitles** — in the Embedded Subs tab, videos that have no embedded tracks but do have an external subtitle file sitting next to them now show "no embedded subtitle tracks — external subtitle file(s) detected" instead of the generic "no subtitle tracks found." The label that has no subtitles of any kind still shows the original message and gets the "Open in Transcribe →" button.
+- **Transcribe tab redesigned** — the Options panel that occupied the entire left half of the screen for a single checkbox has been removed. All controls (SDH mode, Keep backup, Save as .srt, Remux into video) are now in a compact horizontal bar at the bottom of the tab. The Transcription Results table spans the full width of the tab.
 
 ---
 
@@ -227,7 +220,9 @@ For scanning, editing, and cleaning embedded subtitle tracks inside video files 
 5. Check the box next to any flagged track to select it for cleaning, then use **Clean & Remux** to write a new video with the cleaned subtitle replacing the original
 6. To permanently remove a subtitle track from a video, click the **✕** button on the right side of that track row. Marked tracks are excluded from the output on the next remux — useful for removing unwanted language tracks or clearing all existing subtitles
 7. For image tracks, use **Open in Image Subs →** to hand the file off to the Image Subs tab for OCR
-8. The **Clean & Remux** button shows a count when multiple videos are involved (e.g. **Clean & Remux (4)**) and processes them all in sequence
+8. For videos with no subtitle tracks of any kind and no external subtitle file detected, use **Open in Transcribe →** to hand the file off to the Transcribe tab for audio transcription
+9. Videos with no embedded tracks but with an external subtitle file sitting alongside them are labelled "no embedded subtitle tracks — external subtitle file(s) detected" so you can distinguish them at a glance from videos that truly have nothing
+10. The **Clean & Remux** button shows a count when multiple videos are involved (e.g. **Clean & Remux (4)**) and processes them all in sequence
 
 ---
 
@@ -255,12 +250,14 @@ For generating subtitle files from a video's audio track using Whisper AI — en
 ![Transcribe Tab](images/Transcribe_Screenshot.png)
 
 **Workflow:**
-1. Drop a video file onto the drop zone, or use **Browse**
-2. Choose a **Model** (small is a good starting point; large gives the best accuracy)
-3. Choose a **Language** (Auto-detect works well for most content)
-4. Check **Include non-speech audio annotations** if you want `[Music]`, `[Laughs]`, etc. included in the output
+1. Drop a video file onto the drop zone, use **Browse**, or use the **Open in Transcribe →** handoff button from the Embedded Subs tab
+2. If the video already has embedded or external subtitle tracks, an orange warning banner appears naming what was found — transcription may be redundant
+3. Choose a **Model** (small is a good starting point; large gives the best accuracy)
+4. Choose a **Language** (Auto-detect works well for most content)
 5. Click **Transcribe Audio** — the model downloads on first use and is cached locally for all future runs
-6. When transcription completes, use **Save as .srt** to write the subtitle file, or **Remux into video** to add it directly to the video file
+6. When transcription completes, the results appear in an editable table — double-click any text cell to correct the output before saving
+7. Use **Save as .srt** to write the subtitle file, or **Remux into video** to add it directly to the video file
+8. Check **Include non-speech audio annotations** to include cues like `[Music]` and `(applause)` in the output — unchecking this reduces accessibility for deaf and hard of hearing viewers
 
 > **Note:** faster-whisper must be installed separately: `pip install faster-whisper`. It is not bundled in the Windows installer. When running from the installer, faster-whisper must be installed via pip in a Python environment that is on your system PATH.
 
@@ -429,6 +426,9 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
+**v0.17.0 — Subtitle Format Conversion & Expanded Format Support**
+Convert subtitle files between formats (SRT ↔ ASS ↔ VTT) in single-file and batch modes. Expanded support for additional formats pysubs2 can handle.
+
 **v1.0.0 — Accessibility & Release**
 Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass.
 
@@ -436,4 +436,4 @@ The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.15.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.16.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

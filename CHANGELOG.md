@@ -1,5 +1,15 @@
 # SubForge — Release Notes
 
+## v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
+
+- **"Open in Transcribe →" button** — when a video in the Embedded Subs tab has no subtitle tracks of any kind and no external subtitle file sitting next to it, a new button appears in the detail pane alongside the existing "Open in Image Subs →" button. One click loads the video directly into the Transcribe tab. The button is never shown when any subtitle track or external file is present, to avoid directing the user to transcribe something that already has subs.
+- **Subtitle warning banner on Transcribe tab** — whenever a video is loaded into the Transcribe tab (via drop, Browse, or the new handoff button), SubForge probes it in the background for existing embedded and external subtitle tracks. If any are found, an orange warning banner appears naming exactly what was detected (e.g. "28 embedded text tracks, 1 image-based track, external subtitle file(s)") so the user can make an informed decision before transcribing.
+- **Clearer status for videos with external subtitles** — in the Embedded Subs tab, videos that have no embedded tracks but do have an external subtitle file sitting next to them now show "no embedded subtitle tracks — external subtitle file(s) detected" in both the tree label and the detail pane, instead of the generic "no subtitle tracks found." The label and "Open in Transcribe →" button only appear together on videos that truly have nothing.
+- **Transcribe tab redesigned** — the Options panel that occupied the entire left half of the screen for a single checkbox has been removed. The Transcription Results table now spans the full width of the tab. All controls (SDH mode, Keep backup, Save as .srt, Remux into video) are in a compact horizontal bar at the bottom of the tab. The SDH accessibility warning is now a tooltip on the checkbox rather than an inline label.
+- **14 language packs updated** — all new strings for this release are fully translated across all 14 supported interface languages.
+
+---
+
 ## v0.15.0 — Performance, Rename & Polish
 
 - **App startup dramatically faster** — the app previously took up to 10 seconds to open. The culprit was importing `faster-whisper` (and its `ctranslate2` + `transformers` dependencies) synchronously at startup. The check is now deferred to a background thread with a cached result. Startup is near-instant from both source and the frozen executable.

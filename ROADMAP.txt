@@ -1,57 +1,6 @@
 SubForge — Development Roadmap
-Last updated: v0.15.0 (complete) — next: v0.16.0
+Last updated: v0.16.0 (complete) — next: v0.17.0
 ================================================================================
-
-
-v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
---------------------------------------------------------------------------------
-  GOAL: Let users avoid redundant work in long batch operations, wire up
-  cross-tab navigation shortcuts, warn when transcription would be redundant,
-  and fix the Transcribe tab's wasted layout before the accessibility pass.
-
-  SKIP OPTIONS
-  - Option in Settings to skip files during batch scanning. Two modes:
-      1. Skip previously scanned items (any file SubForge has seen before,
-         even if unchanged).
-      2. Skip only files previously altered by SubForge in a meaningful way
-         (SRT extracted, remuxed, or OCR converted).
-    Each mode needs a registry (a lightweight JSON or SQLite log in AppData)
-    that records which files were acted on, by which tab, and when.
-
-  - Extend skip options to the Embedded Subs and Image Subs tabs. Consider
-    whether tabs need separate registries. Key edge case: a user might clean
-    an external .srt in Batch, then later scan the same video under Embedded
-    Subs for the first time — these are genuinely different operations and
-    should not cross-block each other. Separate per-tab logs appear safest.
-    Confirm the performance cost of the registry lookup before a batch scan
-    is negligible (read-once into memory at scan start, not per-file disk I/O).
-
-  CROSS-TAB WORKFLOW
-  - "Open in Transcribe →" button on the Embedded Subs tab. Appears only when
-    the scanned video has no subtitle tracks of any kind AND no external .srt
-    file of the same stem already exists next to the video file. Mirrors the
-    "Open in Image Subs →" button already present. Do not show this button
-    if any external subtitle file is detected, to avoid directing the user
-    to transcribe something that already has subs.
-
-  - Warning banner on the Transcribe tab when the selected video already has
-    embedded, image-based, or external subtitle tracks. The warning should
-    name the track types found so the user can make an informed decision
-    rather than inadvertently creating a duplicate.
-
-  TRANSCRIBE TAB REDESIGN
-  - The Options panel currently occupies the entire left half of the screen
-    for a single checkbox. Move all options (SDH mode, Save as .srt, Remux
-    into video, Keep backup) into a single horizontal options bar below the
-    Transcription Results table. The results table should then span the full
-    width of the tab.
-
-  - Confirm that the inline editing feature (v0.15.0) and the new layout
-    work together correctly — the editable table must still be full-width
-    after the redesign.
-
-  - Update any layout-related strings or tooltips, translate into all 14
-    language packs.
 
 
 v0.17.0 — Subtitle Format Conversion & Expanded Format Support
@@ -60,6 +9,14 @@ v0.17.0 — Subtitle Format Conversion & Expanded Format Support
   the subtitle formats beyond SRT/ASS/VTT that are currently out of scope.
   pysubs2 already handles much of the heavy lifting — this is primarily UI
   and format coverage work.
+
+  KNOWN ISSUES (carried from v0.16.0)
+  - Transcribe tab: the Timestamp column in the results table is too narrow
+    after the layout redesign — the end time is cut off. The column width
+    needs to be increased and the column must be made user-resizable.
+  - Transcribe tab: timestamp cells are not editable inline. Make them
+    editable the same way text cells are, so users can correct timing without
+    leaving the tab.
 
   FORMAT CONVERSION
   - Single-file conversion: SRT ↔ ASS ↔ VTT. A dedicated Convert tab or a
