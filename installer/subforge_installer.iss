@@ -8,12 +8,12 @@
 ;      (or run: iscc subforge_installer.iss from the repo root)
 ;
 ; Output:
-;   Output\SubForge-0.16.0-setup.exe
+;   Output\SubForge-0.17.0-setup.exe
 ;
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "0.16.0"
+#define AppVersion   "0.17.0"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"
@@ -56,10 +56,14 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon";    Description: "{cm:CreateDesktopIcon}";    GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "fileassoc_srt";  Description: "Associate .srt subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
-Name: "fileassoc_ass";  Description: "Associate .ass subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
-Name: "fileassoc_vtt";  Description: "Associate .vtt subtitle files with SubForge";  GroupDescription: "File associations:"; Flags: unchecked
+Name: "desktopicon";     Description: "{cm:CreateDesktopIcon}";                            GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "fileassoc_srt";   Description: "Associate .srt subtitle files with SubForge";       GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_ass";   Description: "Associate .ass subtitle files with SubForge";       GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_ssa";   Description: "Associate .ssa subtitle files with SubForge";       GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_vtt";   Description: "Associate .vtt subtitle files with SubForge";       GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_ttml";  Description: "Associate .ttml subtitle files with SubForge";      GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_sami";  Description: "Associate .sami/.smi subtitle files with SubForge"; GroupDescription: "File associations:"; Flags: unchecked
+Name: "fileassoc_sub";   Description: "Associate .sub subtitle files with SubForge";       GroupDescription: "File associations:"; Flags: unchecked
 
 [Files]
 ; Bundle the entire PyInstaller output folder
@@ -73,19 +77,40 @@ Name: "{group}\Uninstall {#AppName}";   Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}";       Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Registry]
-; .srt file association
-Root: HKLM; Subkey: "Software\Classes\.srt";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_srt
-Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle";               ValueType: string; ValueName: ""; ValueData: "Subtitle File";       Flags: uninsdeletekey;   Tasks: fileassoc_srt
-Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\DefaultIcon";   ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Tasks: fileassoc_srt
+; ── .srt ──────────────────────────────────────────────────────────────────────
+; The first association task (srt) also registers the ProgID and open command
+; that all other extensions share. The ProgID keys use uninsdeletekey so the
+; entire SubForge.subtitle class is removed cleanly on uninstall (only when
+; the srt task was selected — other tasks only add the extension pointer).
+Root: HKLM; Subkey: "Software\Classes\.srt";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_srt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle";                    ValueType: string; ValueName: ""; ValueData: "Subtitle File";      Flags: uninsdeletekey;   Tasks: fileassoc_srt
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\DefaultIcon";        ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"; Tasks: fileassoc_srt
 Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_srt
 
-; .ass file association
-Root: HKLM; Subkey: "Software\Classes\.ass";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_ass
+; ── .ass ──────────────────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.ass";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_ass
 Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_ass
 
-; .vtt file association
-Root: HKLM; Subkey: "Software\Classes\.vtt";                            ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_vtt
+; ── .ssa ──────────────────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.ssa";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_ssa
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_ssa
+
+; ── .vtt ──────────────────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.vtt";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_vtt
 Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_vtt
+
+; ── .ttml ─────────────────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.ttml";                                ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_ttml
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_ttml
+
+; ── .sami / .smi ──────────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.sami";                                ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_sami
+Root: HKLM; Subkey: "Software\Classes\.smi";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_sami
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_sami
+
+; ── .sub (MicroDVD) ───────────────────────────────────────────────────────────
+Root: HKLM; Subkey: "Software\Classes\.sub";                                 ValueType: string; ValueName: ""; ValueData: "SubForge.subtitle"; Flags: uninsdeletevalue; Tasks: fileassoc_sub
+Root: HKLM; Subkey: "Software\Classes\SubForge.subtitle\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""; Tasks: fileassoc_sub
 
 [Run]
 ; offer to launch SubForge after install
