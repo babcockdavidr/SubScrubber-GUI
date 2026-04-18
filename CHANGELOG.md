@@ -1,5 +1,17 @@
 # SubForge — Release Notes
 
+## v0.17.0 — Subtitle Format Conversion & Expanded Format Support
+
+- **Convert Format tab** — a new dedicated tab for converting subtitle files between formats. Single-file mode: drop a file or click Browse, pick an output format from the dropdown, click Convert. The output is written next to the source file using the same stem and the new extension. Batch mode: point at a folder, choose a target format, and Convert All — SubForge processes every supported subtitle file in the folder and reports how many were converted, skipped, and failed. Both modes run in background threads so the UI stays responsive.
+- **Lossy conversion warnings** — when a conversion path is known to degrade the output, SubForge shows an orange warning inline before you convert. ASS/SSA → any other format loses styling (colours, fonts, positioning). TTML and SAMI inputs carry a basic-parser advisory. MicroDVD always shows a framerate advisory (see below). Warnings appear automatically when you select a file or change the target format; they never block the conversion.
+- **Seven supported formats everywhere** — SubForge now reads and writes SRT, ASS, SSA, WebVTT, TTML, SAMI, and MicroDVD across all tabs. Single File, Batch, and the Convert Format tab all accept `.srt`, `.ass`, `.ssa`, `.vtt`, `.ttml`, `.sami`, `.smi`, and `.sub`. The file picker filters, drop zones, and folder scanners all reflect the expanded list. TTML, SAMI, and MicroDVD are handled via pysubs2; the existing native parsers cover SRT, ASS/SSA, and VTT.
+- **MicroDVD (.sub) support** — MicroDVD uses frame numbers instead of timestamps, so correct timing depends on knowing the source framerate. pysubs2 reads the framerate from the first line of the file when it is present (standard practice for well-formed `.sub` files) and falls back to 23.976 fps otherwise. An advisory is always shown whenever `.sub` is involved in a conversion so you know to verify timing if the source framerate is non-standard.
+- **Transcribe tab: timestamp column fixed** — the Timestamp column in the transcription results table was too narrow after the v0.16.0 layout redesign, cutting off the end time. The column is now wider (280px default) and fully user-resizable by dragging the column header.
+- **Transcribe tab: inline timestamp editing** — timestamp cells in the transcription results table are now editable, matching the existing behaviour for text cells. Double-click a timestamp to correct it. The expected format is `HH:MM:SS,mmm → HH:MM:SS,mmm`; invalid input is rejected and the original value is restored automatically.
+- **14 language packs updated** — all new strings for this release are fully translated across all 14 supported interface languages.
+
+---
+
 ## v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
 
 - **"Open in Transcribe →" button** — when a video in the Embedded Subs tab has no subtitle tracks of any kind and no external subtitle file sitting next to it, a new button appears in the detail pane alongside the existing "Open in Image Subs →" button. One click loads the video directly into the Transcribe tab. The button is never shown when any subtitle track or external file is present, to avoid directing the user to transcribe something that already has subs.

@@ -1,8 +1,8 @@
-# SubForge — v0.16.0: Scan Control, Workflow Helpers & Transcribe Redesign
+# SubForge — v0.17.0: Subtitle Format Conversion & Expanded Format Support
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
-SubForge is the ultimate cross-platform, GUI-enabled, multi-format subtitle cleaning and creation tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · and embedded subtitles inside `.mkv` · `.mp4` · and more — including PGS and VOBSUB image-based tracks via OCR, and audio transcription via Whisper AI.
+SubForge is the ultimate cross-platform, GUI-enabled, multi-format subtitle cleaning and creation tool. Supports `.srt` · `.ass` · `.ssa` · `.vtt` · `.ttml` · `.sami` · `.sub` · and embedded subtitles inside `.mkv` · `.mp4` · and more — including PGS and VOBSUB image-based tracks via OCR, and audio transcription via Whisper AI.
 
 SubForge's ad-detection engine is built on a regex-based scoring system, incorporating elements from the original detection logic in [KBlixt/subcleaner](https://github.com/KBlixt/subcleaner), and extended far beyond it: a full GUI, multi-format support, batch processing, embedded subtitle scanning, image track OCR, MKVToolNix and ffmpeg integration, AI audio transcription, and an in-app regex profile editor.
 
@@ -10,11 +10,13 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.16.0 — Scan Control, Workflow Helpers & Transcribe Redesign
-- **"Open in Transcribe →" button** — when a video in the Embedded Subs tab has no subtitle tracks of any kind and no external subtitle file sitting next to it, a new button appears in the detail pane. One click loads the video into the Transcribe tab, ready to generate subtitles from its audio. Mirrors the existing "Open in Image Subs →" button.
-- **Subtitle warning banner on Transcribe tab** — when a video is loaded into the Transcribe tab (via drop, Browse, or the new handoff button), SubForge probes it in the background for existing embedded and external subtitle tracks. If any are found, an orange warning banner appears naming exactly what was detected, so you can make an informed decision before transcribing.
-- **Clearer status for videos with external subtitles** — in the Embedded Subs tab, videos that have no embedded tracks but do have an external subtitle file sitting next to them now show "no embedded subtitle tracks — external subtitle file(s) detected" instead of the generic "no subtitle tracks found." The label that has no subtitles of any kind still shows the original message and gets the "Open in Transcribe →" button.
-- **Transcribe tab redesigned** — the Options panel that occupied the entire left half of the screen for a single checkbox has been removed. All controls (SDH mode, Keep backup, Save as .srt, Remux into video) are now in a compact horizontal bar at the bottom of the tab. The Transcription Results table spans the full width of the tab.
+### v0.17.0 — Subtitle Format Conversion & Expanded Format Support
+- **Convert Format tab** — a new dedicated tab for converting subtitle files between formats. Single-file mode lets you drop a file, pick an output format, and convert in one click. Batch mode converts every supported subtitle file in a folder at once, with a summary of how many were converted, skipped, and failed.
+- **Lossy conversion warnings** — when a conversion is known to degrade the output (ASS/SSA styling, TTML/SAMI parser limits, MicroDVD framerate), SubForge shows an orange warning inline before you proceed. Warnings appear automatically — they never block the conversion.
+- **Seven supported formats everywhere** — SubForge now reads and writes SRT, ASS, SSA, WebVTT, TTML, SAMI, and MicroDVD across Single File, Batch, and the new Convert Format tab. File pickers, drop zones, and folder scanners all accept `.srt`, `.ass`, `.ssa`, `.vtt`, `.ttml`, `.sami`, `.smi`, and `.sub`.
+- **MicroDVD (.sub) support** — frame-based format supported via pysubs2's auto-detect framerate. An advisory is shown whenever `.sub` is involved so you know to verify timing if the source framerate is non-standard.
+- **Transcribe tab: timestamp column fixed** — the Timestamp column is now wider (280px default) and fully user-resizable.
+- **Transcribe tab: inline timestamp editing** — timestamp cells are now editable. Double-click to correct timing; invalid input is rejected and the original value is restored automatically.
 
 ---
 
@@ -28,7 +30,7 @@ But SubForge is more than a cleaner. It can scan image-based subtitle tracks tha
 
 **Compared to manual editing:** Finding and removing junk blocks by hand in a text editor across hundreds or thousands of files is tedious and error-prone. SubForge automates detection across entire libraries in one pass.
 
-**Compared to the original subcleaner:** SubForge shares subcleaner's foundational detection approach — regex profiles scored against subtitle blocks — but has been extended into a completely different application. SubForge adds a full graphical interface, support for every major subtitle format (subcleaner only handles `.srt`), batch processing with a live sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix and ffmpeg remuxing, PGS and VOBSUB OCR via Tesseract, Whisper AI audio transcription, an in-app regex editor, and 14 language packs. The detection engine itself has been significantly expanded with additional scoring logic, contextual punishers, structural detectors, and cleaning options that go well beyond what subcleaner provides.
+**Compared to the original subcleaner:** SubForge shares subcleaner's foundational detection approach — regex profiles scored against subtitle blocks — but has been extended into a completely different application. SubForge adds a full graphical interface, support for every major subtitle format (subcleaner only handles `.srt`), batch processing with a live sensitivity slider, embedded subtitle scanning via ffprobe, MKVToolNix and ffmpeg remuxing, PGS and VOBSUB OCR via Tesseract, Whisper AI audio transcription, format conversion across SRT/ASS/SSA/VTT/TTML/SAMI/MicroDVD, an in-app regex editor, and 14 language packs. The detection engine itself has been significantly expanded with additional scoring logic, contextual punishers, structural detectors, and cleaning options that go well beyond what subcleaner provides.
 
 **Compared to online subtitle cleaners:** Online tools require uploading your files to a third-party server. SubForge runs entirely on your machine. No files ever leave your computer. No accounts. No internet connection required during use. No ads. To this author's knowledge, no online subtitle tool supports recursive folder scanning, embedded subtitle cleaning, image-track OCR, or AI audio transcription — all of which SubForge handles natively.
 
@@ -92,7 +94,7 @@ python subforge.py movie.en.srt
 
 ## GUI Overview
 
-The main window has six tabs: **Single File**, **Batch**, **Embedded Subs**, **Image Subs**, **Transcribe**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current operation status on the left — including a live elapsed timer during scans — a **Check for Updates** button, and the version number on the right.
+The main window has seven tabs: **Single File**, **Batch**, **Embedded Subs**, **Image Subs**, **Transcribe**, **Convert Format**, and **Regex Editor**. A **⚙ Settings** button in the top bar opens the global Settings dialog. The status bar at the bottom shows the current operation status on the left — including a live elapsed timer during scans — a **Check for Updates** button, and the version number on the right.
 
 ---
 
@@ -426,14 +428,11 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v0.17.0 — Subtitle Format Conversion & Expanded Format Support**
-Convert subtitle files between formats (SRT ↔ ASS ↔ VTT) in single-file and batch modes. Expanded support for additional formats pysubs2 can handle.
-
-**v1.0.0 — Accessibility & Release**
-Light and high contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Full cross-platform test pass.
+**v1.0.0 — Accessibility, Themes & Release**
+Light and high-contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Scheduled folder scanning with auto-clean. Translated READMEs. Release candidate period before final tag.
 
 The full roadmap is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.16.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v0.17.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

@@ -1,43 +1,53 @@
 SubForge — Development Roadmap
-Last updated: v0.16.0 (complete) — next: v0.17.0
+Last updated: v0.17.0 (complete) — next: v1.0.0
 ================================================================================
 
 
 v0.17.0 — Subtitle Format Conversion & Expanded Format Support
 --------------------------------------------------------------------------------
   GOAL: Let users convert subtitle files between formats and add support for
-  the subtitle formats beyond SRT/ASS/VTT that are currently out of scope.
-  pysubs2 already handles much of the heavy lifting — this is primarily UI
-  and format coverage work.
+  subtitle formats beyond SRT/ASS/VTT across all tabs. pysubs2 handles the
+  heavy lifting — this is primarily UI and format coverage work.
 
-  KNOWN ISSUES (carried from v0.16.0)
-  - Transcribe tab: the Timestamp column in the results table is too narrow
-    after the layout redesign — the end time is cut off. The column width
-    needs to be increased and the column must be made user-resizable.
-  - Transcribe tab: timestamp cells are not editable inline. Make them
-    editable the same way text cells are, so users can correct timing without
-    leaving the tab.
+  KNOWN ISSUES (carried from v0.16.0) — RESOLVED in v0.17.0
+  - [FIXED] Transcribe tab: Timestamp column was too narrow — end time cut off.
+    Column is now wider (280px default) and user-resizable (Interactive mode).
+  - [FIXED] Transcribe tab: timestamp cells were not editable inline. Now
+    editable; bad input is rejected and the original value is restored.
 
-  FORMAT CONVERSION
-  - Single-file conversion: SRT ↔ ASS ↔ VTT. A dedicated Convert tab or a
-    context action in Single File (decide which is cleaner before coding).
-    Input format detected automatically from the file extension. Output format
-    selected by the user. Output file written next to the source using the
-    same stem + new extension.
+  SUPPORTED FORMATS (finalized after pysubs2 audit)
+  Six text-based formats are supported everywhere in SubForge — Single File,
+  Batch, and the new Convert tab. All handled via pysubs2; no custom parsers.
 
-  - Batch format conversion. Apply a format conversion across all subtitle
-    files in a folder, with a target format dropdown. Output files written
-    next to each source file (or optionally into a subfolder — decide before
-    coding). Report how many files were converted and flag any failures.
+    SRT   (.srt)        — SubRip. Universal standard. Full fidelity.
+    ASS   (.ass)        — Advanced SubStation Alpha. Rich styling. Full fidelity.
+    SSA   (.ssa)        — SubStation Alpha (older ASS variant). Full fidelity.
+    VTT   (.vtt)        — WebVTT. Web standard. Timing fine; no style round-trip.
+    TTML  (.ttml)       — W3C Timed Text. Basic parser; complex styling is lossy.
+    SAMI  (.sami/.smi)  — Legacy Windows Media Player format. Rudimentary parser;
+                          flag as potentially lossy on input.
 
-  EXPANDED FORMAT SUPPORT
-  - Add support for WebVTT, TTML, SAMI, SUB, SBV, and any other formats
-    pysubs2 can handle. Audit pysubs2's format coverage first before writing
-    any custom parsers.
+  Excluded: MicroDVD (.sub) — frame-based, requires video framerate to convert
+  correctly. No framerate context available in a Convert tab. See MAYBE SOMEDAY.
 
-  - Evaluate round-trip fidelity for each format (timing precision, tag
-    stripping, encoding). If there are known lossy edges, surface a warning
-    in the UI rather than silently degrading the output.
+  LOSSY CONVERSION WARNINGS (surface in UI, never silently degrade)
+  - ASS/SSA → any other format: styling is not preserved. Warn the user.
+  - TTML or SAMI as input: complex styling may not survive the round-trip.
+
+  CONVERT TAB (dedicated tab, fully featured)
+  - Single-file mode: drag-and-drop or Browse for one subtitle file. Input
+    format auto-detected from extension. Output format chosen from a dropdown
+    (all 6 formats). Output written next to source using same stem + new
+    extension. Lossy warnings shown inline when the path is known to be lossy.
+  - Batch mode: point at a folder, choose a target format, convert all
+    supported subtitle files found. Output written next to each source file.
+    Summary on completion: N converted, N skipped, N failed.
+
+  EXPANDED FORMAT SUPPORT IN SINGLE FILE & BATCH
+  - Single File tab file picker and drop target must accept all 6 formats.
+    Detection, cleaning, and Save As must all work for the new formats.
+  - Batch tab folder scan must pick up all 6 extensions. Format-specific
+    parse failures flagged per-file, not silently skipped.
 
   - Add new strings to all 14 language packs.
 
@@ -68,12 +78,29 @@ v1.0.0 — Accessibility, Themes & Release
     and progress indicators.
 
   - Final branding pass. Every user-facing string, label, button text,
-    and tooltip reviewed for consistency and clarity.
+    and tooltip reviewed for consistency and clarity. Icon creation and added to the installer.
 
   - Translated READMEs. Generate README.es.md, README.fr.md, etc. (one per
     language pack) in a docs/ folder, linked from the top of the main README.
     AI-generated translations are fine. These are maintenance-light once
     written — only update when major features ship.
+
+  - "Open data folder" button in Settings > About (or General). Opens the
+    directory that holds settings.json, Whisper model cache, and logs in the
+    system file manager. Platform logic:
+      Windows frozen (.exe): %APPDATA%\SubForge
+      Windows/any from source: repo root (where settings.json lives)
+      macOS: placeholder — ~/Library/Application Support/SubForge (TBD when
+             macOS packaging is tackled post-1.0)
+      Linux: placeholder — ~/.local/share/SubForge (TBD with Linux binary work)
+    Use QDesktopServices.openUrl(QUrl.fromLocalFile(path)) — cross-platform,
+    no subprocess needed. The frozen/source distinction is already handled by
+    the paths module; just expose it as a button.
+
+  - Scheduled scanning. Let users configure a folder watch on a schedule
+    (e.g. nightly, hourly). New subtitle files that appear since the last run
+    are automatically cleaned using the cleaning settings the user chose at
+    scheduling time. Results logged; user notified of what was changed.
 
   - Release candidate period. Tag an RC build, run a clean-machine install
     test, and give at least a few days for issue reports before tagging 1.0.0.
@@ -103,6 +130,15 @@ POST-1.0 — FUTURE FEATURES
   - User-written detection logic in Python, for edge cases the regex engine
     cannot handle.
   - Sandboxing and a defined API surface need design work before coding.
+
+
+================================================================================
+MAYBE SOMEDAY
+================================================================================
+
+  (Nothing here yet — MicroDVD (.sub) support was promoted out of this section
+  and shipped in v0.17.0 using pysubs2's auto-detect framerate approach, with
+  an inline advisory shown whenever .sub is involved in a conversion.)
 
 
 ================================================================================
