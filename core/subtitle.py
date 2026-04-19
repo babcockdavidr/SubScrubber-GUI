@@ -635,6 +635,97 @@ def write_subtitle(subtitle: ParsedSubtitle, dest: Optional[Path] = None) -> Non
         raise ValueError(f"Cannot write format: {subtitle.fmt}")
 
 
+# ---------------------------------------------------------------------------
+# Timing manipulation
+# ---------------------------------------------------------------------------
+
+def shift_timestamps(subtitle: ParsedSubtitle, offset_ms: int) -> None:
+    """
+    Shift every block's start and end time by offset_ms milliseconds (in-place).
+    Negative values shift earlier; positive values shift later.
+    Blocks whose start time would go below zero are clamped to zero.
+    The end time is clamped so it is never less than the (clamped) start time.
+    """
+    delta = datetime.timedelta(milliseconds=offset_ms)
+    zero  = datetime.timedelta(0)
+    for block in subtitle.blocks:
+        new_start = block.start_time + delta
+        new_end   = block.end_time   + delta
+        if new_start < zero:
+            new_start = zero
+        if new_end < new_start:
+            new_end = new_start
+        block.start_time = new_start
+        block.end_time   = new_end
+        # Keep _ass_raw_line in sync for ASS/SSA — update inline timing fields.
+        if block._ass_raw_line is not None:
+            _patch_ass_timestamps(block)
+
+
+def stretch_timestamps(subtitle: ParsedSubtitle,
+                       t1_ms: int, t2_ms: int,
+                       new_t1_ms: int, new_t2_ms: int) -> None:
+    """
+    Linearly scale all timestamps so that what was at t1_ms lands at new_t1_ms
+    and what was at t2_ms lands at new_t2_ms (in-place).
+
+    All other timestamps are interpolated proportionally between those two
+    anchor points.  Blocks outside the anchor range are extrapolated using the
+    same scale factor, which keeps the file internally consistent.
+
+    Use this to correct subtitle drift caused by a framerate mismatch: set t1
+    to a timestamp near the start that is currently correct, set t2 to a
+    timestamp near the end that you know the subtitle should hit, enter what
+    those timestamps should actually be, and SubForge rescales everything in
+    between.
+
+    Raises ValueError if the anchor span is zero (t1_ms == t2_ms or
+    new_t1_ms == new_t2_ms would produce a degenerate scale).
+    """
+    span_in  = t2_ms - t1_ms
+    span_out = new_t2_ms - new_t1_ms
+    if span_in == 0:
+        raise ValueError("t1 and t2 must be different timestamps.")
+    if span_out == 0:
+        raise ValueError("new_t1 and new_t2 must be different timestamps.")
+
+    scale = span_out / span_in
+    zero  = datetime.timedelta(0)
+
+    def _remap(ms: float) -> datetime.timedelta:
+        remapped = new_t1_ms + (ms - t1_ms) * scale
+        result = datetime.timedelta(milliseconds=max(remapped, 0.0))
+        return result
+
+    for block in subtitle.blocks:
+        orig_start_ms = block.start_time.total_seconds() * 1000
+        orig_end_ms   = block.end_time.total_seconds()   * 1000
+        new_start = _remap(orig_start_ms)
+        new_end   = _remap(orig_end_ms)
+        if new_end < new_start:
+            new_end = new_start
+        block.start_time = new_start
+        block.end_time   = new_end
+        if block._ass_raw_line is not None:
+            _patch_ass_timestamps(block)
+
+
+def _patch_ass_timestamps(block: "SubBlock") -> None:
+    """Rewrite the start/end timestamps in a stored ASS Dialogue line."""
+    import re as _re
+    line = block._ass_raw_line
+    if line is None:
+        return
+    # ASS Dialogue: Layer, Start, End, ...
+    # Replace the 2nd and 3rd comma-delimited fields (Start and End)
+    parts = line.split(",")
+    if len(parts) < 3:
+        return
+    parts[1] = timedelta_to_ass_string(block.start_time)
+    parts[2] = timedelta_to_ass_string(block.end_time)
+    block._ass_raw_line = ",".join(parts)
+
+
 def _write_via_pysubs2(subtitle: ParsedSubtitle, dest: Path) -> None:
     """Write TTML, SAMI, or MicroDVD via pysubs2."""
     import pysubs2
