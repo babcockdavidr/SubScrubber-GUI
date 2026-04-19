@@ -117,7 +117,7 @@ Click **⚙ Settings** in the toolbar to open the Settings dialog. It has six ta
 
 ### General
 
-![Settings, General](images/Settings_Screenshot.png)
+![Settings, General](images/Settings_General_Screenshot.png)
 
 - **Default sensitivity** — sets the starting sensitivity level (1–5) applied to all tabs when SubForge launches. Drag the slider toward Aggressive to catch more blocks, or toward Conservative to reduce false positives. This is the same slider available in Single File, Batch, and Embedded Subs — changing it here sets what value those sliders start at on next launch. A scan elapsed timer in the status bar shows how long each Batch or Embedded Subs scan takes.
 - **Language** — changes the interface language. SubForge supports 14 languages: English, Spanish, Dutch, Hebrew, Indonesian, Portuguese, Swedish, French, Arabic, Chinese, Hindi, Russian, Turkish, and Polish. A restart is required to apply the change; SubForge will offer to restart automatically.
@@ -128,7 +128,7 @@ Click **⚙ Settings** in the toolbar to open the Settings dialog. It has six ta
 
 Cleaning options apply globally across Single File, Batch, and Embedded Subs at the time a file is saved or remuxed. They do not affect detection — only what gets written to disk.
 
-![Settings, Cleaning Options](images/Settings_Screenshot2.png)
+![Settings, Cleaning Options](images/Settings_Cleaning_Screenshot.png)
 
 **Content removal:**
 - **Remove music cues** — strips lines that consist entirely of music notation (e.g. `♪ instrumental ♪`)
@@ -147,6 +147,8 @@ Cleaning options apply globally across Single File, Batch, and Embedded Subs at 
 
 Configure where SubForge looks for external tools. Each entry has a Browse button and a live status indicator showing whether the tool was found. Leave any field blank to rely on system PATH.
 
+![Settings, Paths](images/Settings_Paths_Screenshot.png)
+
 - **FFmpeg** — required for Embedded Subs, MP4 remux, and the Transcribe tab
 - **ffprobe** — required for Embedded Subs and Image Subs track detection
 - **mkvmerge** — required for MKV remux across all tabs
@@ -155,7 +157,11 @@ Configure where SubForge looks for external tools. Each entry has a Browse butto
 
 ### Watch Folders
 
-Add folders for SubForge to monitor continuously while running. Any new subtitle file that appears in a watched folder (including subfolders) is automatically cleaned in the background using the current global cleaning options and default sensitivity. Uses OS-level file system notifications — no polling, no CPU overhead while idle. A green badge in the status bar shows how many folders are active. Watch folder errors appear in both the status bar and the error log.
+Add folders for SubForge to monitor continuously while running.
+
+![Settings, Watch Folders](images/Settings_Watch_Screenshot.png)
+
+Any new subtitle file that appears in a watched folder (including subfolders) is automatically cleaned in the background using the current global cleaning options and default sensitivity. Uses OS-level file system notifications — no polling, no CPU overhead while idle. A green badge in the status bar shows how many folders are active. Watch folder errors appear in both the status bar and the error log.
 
 When you add a folder that already contains subtitle files, a confirmation dialog lists the file count and the current sensitivity level and asks you to confirm before running an immediate recursive clean pass on the existing files.
 
@@ -163,7 +169,11 @@ Watched folders and their configuration persist in `settings.json` and are resto
 
 ### Scheduler
 
-Configure folders to be scanned automatically on a flexible recurring schedule. When adding a schedule, choose from three interval modes:
+Configure folders to be scanned automatically on a flexible recurring schedule.
+
+![Settings, Scheduler](images/Settings_Scheduler_Screenshot.png)
+
+When adding a schedule, choose from three interval modes:
 
 - **Minutes** — scan every X minutes (e.g. every 30 minutes)
 - **Hours** — scan every X hours (e.g. every 2 hours)
@@ -175,7 +185,11 @@ Schedule configuration, including the last-run timestamp for each job, persists 
 
 ### About
 
-Shows the current version, author, and links to the GitHub repository and issue tracker. Four buttons:
+Shows the current version, author, and links to the GitHub repository and issue tracker.
+
+![Settings, About](images/Settings_About_Screenshot.png)
+
+Four buttons:
 
 - **What's New** — opens the release notes dialog showing the full changelog
 - **View Error Log** — opens a scrollable log of any errors SubForge has encountered, with the log file path shown at the top. Each entry includes the originating tab, a UTC timestamp, and the full traceback. A **Clear Log** button resets the file
@@ -205,7 +219,7 @@ For loading, inspecting, and cleaning individual subtitle files.
 
 ---
 
-## Shift Timestamps
+### Shift Timestamps
 
 The **Shift Timestamps…** button in the Single File action bar fixes subtitles that are all off by the same amount — every line arrives too early or too late by a consistent delay.
 
@@ -229,7 +243,7 @@ The shift is non-destructive until you save. If you enter the wrong value, simpl
 
 ---
 
-## Stretch Timing
+### Stretch Timing
 
 The **Stretch Timing…** button fixes subtitles that start roughly in sync but drift progressively further out of sync as the video goes on — the classic symptom of a framerate mismatch between the subtitle file and the video it was made for.
 
@@ -261,7 +275,7 @@ Like Shift, the stretch is non-destructive until you save. If the result looks w
 
 ---
 
-## Watch Folders
+### Watch Folders
 
 The **Watch Folders** tab in Settings lets you tell SubForge to monitor one or more folders continuously while the app is running. Any new subtitle file that appears in a watched folder is cleaned automatically — no manual intervention needed.
 
@@ -291,7 +305,7 @@ Watch folder configuration is saved in `settings.json` and restored automaticall
 
 ---
 
-## Scheduled Scanning
+### Scheduled Scanning
 
 The **Scheduler** tab in Settings lets you configure folders to be scanned automatically on a flexible recurring schedule. Unlike Watch Folders (which only react to new files), scheduled scans clean everything in the folder at each run, including files that were there before.
 
@@ -327,7 +341,7 @@ Each scheduled job has a folder and an interval. You choose from three modes: ev
 
 ---
 
-## Always Mark as Ad (Add Pattern Dialog)
+### Always Mark as Ad (Add Pattern Dialog)
 
 The **Always Mark as Ad…** button teaches SubForge to recognise a pattern permanently, so it is automatically flagged in every future file — not just the current one.
 
@@ -370,7 +384,7 @@ For cleaning an entire media library in one pass, including libraries where each
 
 For scanning, editing, and cleaning embedded subtitle tracks inside video files without extracting them first.
 
-![Embedded Subs Tab](images/Video_Scan_Screenshot.png)
+![Embedded Subs Tab](images/Embedded_Screenshot.png)
 
 **Workflow:**
 1. Click **Add Folder** to choose a folder — SubForge scans recursively for `.mkv`, `.mp4`, `.m4v`, `.avi`, `.ts`, and other container formats
@@ -450,7 +464,7 @@ For converting subtitle files between the seven supported formats — individual
 
 For managing and editing the regex profiles that drive ad detection.
 
-![Regex Editor Tab](images/Regex_Editor_Screenshot.png)
+![Regex Editor Tab](images/Regex_Screenshot.png)
 
 **Workflow:**
 1. Choose a profile from the dropdown (e.g. `global.conf`, `english.conf`)
