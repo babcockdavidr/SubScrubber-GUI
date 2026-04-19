@@ -38,6 +38,7 @@ from core.whisper import (
 )
 from gui.strings import STRINGS
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 
 # ISO language codes for the language selector.
@@ -72,10 +73,16 @@ _LANGUAGES = [
 # HTML helpers — identical style to image_subs_panel.py
 # ---------------------------------------------------------------------------
 
-HTML_STYLE = f"""<style>
+def _html_style() -> str:
+    from .settings_dialog import get_font_pt as _fp
+    fp  = _fp()
+    body_px = round(fp * 1.3)
+    sec_px  = round(fp * 1.1)
+    ts_px   = round(fp * 1.2)
+    return f"""<style>
   body {{ background:{BG2}; color:{FG}; font-family:Consolas,monospace;
-          font-size:13px; margin:8px; }}
-  .section  {{ color:{ACCENT}; font-size:11px; text-transform:uppercase;
+          font-size:{body_px}px; margin:8px; }}
+  .section  {{ color:{ACCENT}; font-size:{sec_px}px; text-transform:uppercase;
                letter-spacing:1px; margin-top:16px; margin-bottom:6px;
                border-bottom:1px solid {BORDER}; padding-bottom:3px; }}
   .meta-row {{ margin:3px 0; }}
@@ -89,13 +96,13 @@ HTML_STYLE = f"""<style>
                 border-left:4px solid {ORANGE}; }}
   .tag-ad    {{ color:#ff9eb5; font-weight:bold; }}
   .tag-warn  {{ color:#ffc990; font-weight:bold; }}
-  .ts        {{ color:#7dcfff; font-size:12px; }}
+  .ts        {{ color:#7dcfff; font-size:{ts_px}px; }}
   .ad-text   {{ color:#ff9eb5; }}
   .opt-text  {{ color:#89b4fa; }}
   .warn-text {{ color:#ffc990; }}
-  .reason    {{ color:#565f89; font-size:11px; margin-right:8px; }}
+  .reason    {{ color:#565f89; font-size:{sec_px}px; margin-right:8px; }}
   .clean-msg {{ color:{GREEN}; margin-top:10px; }}
-  .note      {{ color:{FG2}; font-size:11px; font-style:italic; margin-top:8px; }}
+  .note      {{ color:{FG2}; font-size:{sec_px}px; font-style:italic; margin-top:8px; }}
   .warn-msg  {{ color:{ORANGE}; margin-top:8px; }}
   .ok        {{ color:{GREEN}; margin-top:8px; }}
   .scanning  {{ color:{ACCENT}; margin-top:8px; }}
@@ -109,7 +116,7 @@ def _esc(s) -> str:
 
 def _welcome_html() -> str:
     return (
-        HTML_STYLE
+        _html_style()
         + f'<div class="section">{_esc(STRINGS["tab_transcribe"])}</div>'
         + f'<div class="note">{STRINGS["tr_welcome_note"]}</div>'
     )
@@ -117,7 +124,7 @@ def _welcome_html() -> str:
 
 def _transcribing_html(status: str) -> str:
     return (
-        HTML_STYLE
+        _html_style()
         + f'<div class="section">{_esc(STRINGS["tab_transcribe"])}</div>'
         + f'<div class="scanning">⟳ {_esc(status)}</div>'
     )
@@ -193,7 +200,7 @@ class TranscribeDropZone(QFrame):
         super().__init__()
         self.setObjectName("drop_zone")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(max(90, round(90 * _get_fp() / 11)))
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -203,11 +210,11 @@ class TranscribeDropZone(QFrame):
 
         msg = QLabel(STRINGS["tr_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        msg.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         fmt = QLabel(STRINGS["tr_drop_formats"])
         fmt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fmt.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        fmt.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
 
         browse = QPushButton(STRINGS["tr_btn_browse"])
         browse.setMaximumWidth(100)
@@ -275,25 +282,17 @@ class TranscribePanel(QWidget):
         self._whisper_notice = QLabel()
         self._whisper_notice.setStyleSheet(
             f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: {_get_fp()}pt;"
         )
         self._whisper_notice.setWordWrap(True)
         self._whisper_notice.setVisible(False)
-
-        # Experimental warning — yellow, always visible, same style as Image Subs
-        self._experimental_notice = QLabel(STRINGS["tr_experimental"])
-        self._experimental_notice.setStyleSheet(
-            f"color: {YELLOW}; background: transparent; border: 1px solid {YELLOW}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
-        )
-        self._experimental_notice.setWordWrap(True)
 
         # Subtitle-already-exists warning — orange, hidden until a file is loaded
         # and a background probe finds existing tracks or external subtitle files
         self._subs_warning = QLabel()
         self._subs_warning.setStyleSheet(
             f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: {_get_fp()}pt;"
         )
         self._subs_warning.setWordWrap(True)
         self._subs_warning.setVisible(False)
@@ -311,7 +310,7 @@ class TranscribePanel(QWidget):
         self._lbl_file.setStyleSheet(f"color: {FG2};")
 
         lbl_model = QLabel(STRINGS["tr_lbl_model"])
-        lbl_model.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_model.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._model_combo = QComboBox()
         self._model_combo.setStyleSheet(
@@ -320,10 +319,11 @@ class TranscribePanel(QWidget):
             f"QComboBox QAbstractItemView {{ background: {BG2}; color: {FG}; "
             f"selection-background-color: {BG3}; selection-color: {FG}; border: 1px solid {BORDER}; }}"
         )
+        self._model_combo.setAccessibleName(STRINGS["tr_lbl_model"])
         self._populate_model_combo()
 
         lbl_lang = QLabel(STRINGS["tr_lbl_language"])
-        lbl_lang.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_lang.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._lang_combo = QComboBox()
         self._lang_combo.setStyleSheet(
@@ -332,6 +332,7 @@ class TranscribePanel(QWidget):
             f"QComboBox QAbstractItemView {{ background: {BG2}; color: {FG}; "
             f"selection-background-color: {BG3}; selection-color: {FG}; border: 1px solid {BORDER}; }}"
         )
+        self._lang_combo.setAccessibleName(STRINGS["tr_lbl_language"])
         for i, (code, name) in enumerate(_LANGUAGES):
             label = STRINGS["tr_lang_auto"] if code == "auto" else name
             self._lang_combo.addItem(label)
@@ -356,6 +357,7 @@ class TranscribePanel(QWidget):
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
         self._progress.setRange(0, 0)
+        self._progress.setAccessibleName(STRINGS["tr_btn_transcribe"])
 
         # ── Drop zone ─────────────────────────────────────────────────────
         self._drop_zone = TranscribeDropZone()
@@ -421,7 +423,7 @@ class TranscribePanel(QWidget):
         # Hint label below the table — visible only when table is shown
         self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
         self._lbl_edit_hint.setStyleSheet(
-            f"color: {FG2}; font-size: 9pt; font-style: italic;")
+            f"color: {FG2}; font-size: {_get_fps()}pt; font-style: italic;")
         self._lbl_edit_hint.setWordWrap(True)
         self._lbl_edit_hint.setVisible(False)
 
@@ -456,7 +458,6 @@ class TranscribePanel(QWidget):
 
         # ── Assemble root ─────────────────────────────────────────────────
         root.addWidget(self._whisper_notice)
-        root.addWidget(self._experimental_notice)
         root.addWidget(self._subs_warning)
         root.addLayout(ctrl)
         root.addWidget(self._drop_zone)
@@ -465,6 +466,15 @@ class TranscribePanel(QWidget):
         root.addWidget(self._detail_stack, stretch=1)
         root.addWidget(self._lbl_edit_hint)
         root.addLayout(options_bar)
+
+        # Tab order
+        self.setTabOrder(self._btn_clear,     self._model_combo)
+        self.setTabOrder(self._model_combo,   self._lang_combo)
+        self.setTabOrder(self._lang_combo,    self._btn_transcribe)
+        self.setTabOrder(self._btn_transcribe, self._chk_sdh)
+        self.setTabOrder(self._chk_sdh,       self._chk_backup)
+        self.setTabOrder(self._chk_backup,    self._btn_save_srt)
+        self.setTabOrder(self._btn_save_srt,  self._btn_remux)
 
     # ── Status helper ─────────────────────────────────────────────────────
 
@@ -667,7 +677,7 @@ class TranscribePanel(QWidget):
         if not result.success:
             self._set_status(STRINGS["tr_status_error"])
             self._detail.setHtml(
-                HTML_STYLE
+                _html_style()
                 + '<div class="section">Error</div>'
                 + f'<div class="warn-msg">{_esc(result.error)}</div>'
             )
@@ -678,7 +688,7 @@ class TranscribePanel(QWidget):
         if self._subtitle is None:
             self._set_status(STRINGS["tr_dlg_empty_msg"])
             self._detail.setHtml(
-                HTML_STYLE
+                _html_style()
                 + '<div class="section">Result</div>'
                 + f'<div class="warn-msg">{_esc(STRINGS["tr_dlg_empty_msg"])}</div>'
             )

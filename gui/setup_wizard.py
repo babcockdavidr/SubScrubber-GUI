@@ -15,10 +15,11 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QComboBox,
 )
 
-from .colors  import BG, BG2, FG, FG2, ACCENT, GREEN, RED, ORANGE
+from .colors  import BG, BG2, FG, FG2, ACCENT, GREEN, RED, ORANGE, get_theme, save_theme as _save_theme
 from .strings import STRINGS
 
 from core.paths import load_settings as _load_settings, save_settings as _save_settings
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 
 def is_setup_complete() -> bool:
@@ -64,11 +65,11 @@ class _ToolRow(QFrame):
         text_col.setSpacing(2)
 
         lbl_name = QLabel(name)
-        lbl_name.setStyleSheet(f"color: {FG}; font-size: 10pt; font-weight: bold;")
+        lbl_name.setStyleSheet(f"color: {FG}; font-size: {_get_fp()}pt; font-weight: bold;")
         text_col.addWidget(lbl_name)
 
         lbl_detail = QLabel(detail)
-        lbl_detail.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        lbl_detail.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
         lbl_detail.setWordWrap(True)
         text_col.addWidget(lbl_detail)
 
@@ -81,7 +82,7 @@ class _ToolRow(QFrame):
                 f"QPushButton {{"
                 f"  color: {ACCENT}; background: transparent;"
                 f"  border: 1px solid {ACCENT}; border-radius: 4px;"
-                f"  padding: 4px 10px; font-size: 9pt;"
+                f"  padding: 4px 10px; font-size: {_get_fps()}pt;"
                 f"}}"
                 f"QPushButton:hover {{ background: {ACCENT}22; }}"
             )
@@ -129,7 +130,7 @@ class SetupWizard(QDialog):
         # ── Language selector ─────────────────────────────────────────────
         lang_row = QHBoxLayout()
         lang_lbl = QLabel(STRINGS["settings_lbl_language"])
-        lang_lbl.setStyleSheet(f"color: {FG}; font-size: 10pt;")
+        lang_lbl.setStyleSheet(f"color: {FG}; font-size: {_get_fp()}pt;")
         self._lang_combo = QComboBox()
         self._lang_codes = list(LANGUAGES.keys())
         for code in self._lang_codes:
@@ -139,13 +140,40 @@ class SetupWizard(QDialog):
             self._lang_combo.setCurrentIndex(self._lang_codes.index(current_lang))
         self._lang_combo.setStyleSheet(
             f"background: {BG2}; color: {FG}; border: 1px solid #444; "
-            f"border-radius: 3px; padding: 3px 8px; font-size: 10pt;"
+            f"border-radius: 3px; padding: 3px 8px; font-size: {_get_fp()}pt;"
         )
         self._lang_combo.currentIndexChanged.connect(self._on_language_changed)
         lang_row.addWidget(lang_lbl)
         lang_row.addWidget(self._lang_combo)
         lang_row.addStretch()
         layout.addLayout(lang_row)
+
+        # ── Theme selector ────────────────────────────────────────────────
+        theme_row = QHBoxLayout()
+        theme_lbl = QLabel(STRINGS["settings_lbl_theme"])
+        theme_lbl.setStyleSheet(f"color: {FG}; font-size: {_get_fp()}pt;")
+        self._theme_combo = QComboBox()
+        self._theme_names  = ["dark", "light", "high_contrast", "amoled"]
+        self._theme_labels = [
+            STRINGS["settings_theme_dark"],
+            STRINGS["settings_theme_light"],
+            STRINGS["settings_theme_hc"],
+            STRINGS["settings_theme_amoled"],
+        ]
+        for label in self._theme_labels:
+            self._theme_combo.addItem(label)
+        current_theme = get_theme()
+        if current_theme in self._theme_names:
+            self._theme_combo.setCurrentIndex(self._theme_names.index(current_theme))
+        self._theme_combo.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid #444; "
+            f"border-radius: 3px; padding: 3px 8px; font-size: {_get_fp()}pt;"
+        )
+        self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        theme_row.addWidget(theme_lbl)
+        theme_row.addWidget(self._theme_combo)
+        theme_row.addStretch()
+        layout.addLayout(theme_row)
 
         # ── Divider ───────────────────────────────────────────────────────
         line0 = QFrame()
@@ -160,7 +188,7 @@ class SetupWizard(QDialog):
         layout.addWidget(lbl_title)
 
         lbl_sub = QLabel(STRINGS["wizard_subheading"])
-        lbl_sub.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        lbl_sub.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
         lbl_sub.setWordWrap(True)
         layout.addWidget(lbl_sub)
 
@@ -225,7 +253,7 @@ class SetupWizard(QDialog):
 
         # ── Footer ────────────────────────────────────────────────────────
         lbl_note = QLabel(STRINGS["wizard_note"])
-        lbl_note.setStyleSheet(f"color: {FG2}; font-size: 8pt;")
+        lbl_note.setStyleSheet(f"color: {FG2}; font-size: {_get_fpt()}pt;")
         lbl_note.setWordWrap(True)
         layout.addWidget(lbl_note)
 
@@ -237,13 +265,36 @@ class SetupWizard(QDialog):
             f"QPushButton {{"
             f"  background: {ACCENT}; color: {BG};"
             f"  border: none; border-radius: 5px;"
-            f"  padding: 8px 20px; font-size: 10pt; font-weight: bold;"
+            f"  padding: 8px 20px; font-size: {_get_fp()}pt; font-weight: bold;"
             f"}}"
             f"QPushButton:hover {{ background: {ACCENT}cc; }}"
         )
         btn_ok.clicked.connect(self._finish)
         btn_row.addWidget(btn_ok)
         layout.addLayout(btn_row)
+
+    def _on_theme_changed(self, index: int) -> None:
+        """Save theme and restart the app to apply it fully."""
+        import sys, subprocess
+        theme_name = self._theme_names[index]
+        _save_theme(theme_name)
+
+        frozen = getattr(sys, "frozen", False)
+        args = [sys.executable] if frozen else [sys.executable] + sys.argv
+
+        creationflags = 0
+        if sys.platform == "win32":
+            DETACHED_PROCESS     = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            creationflags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+
+        subprocess.Popen(args, close_fds=True, creationflags=creationflags)
+
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.quit()
+        sys.exit(0)
 
     def _on_language_changed(self, index: int):
         """Save language and restart the app to apply it fully."""

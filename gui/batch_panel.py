@@ -35,6 +35,77 @@ from gui.settings_dialog import load_cleaning_options, load_default_sensitivity
 from gui.strings import STRINGS
 from core.subtitle import ParsedSubtitle
 from .colors import BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
+
+
+def _batch_html_style_summary() -> str:
+    """CSS for the batch summary report — scales with font size setting."""
+    fp = _get_fp()
+    body_px = round(fp * 1.3)
+    sec_px  = round(fp * 1.1)
+    ts_px   = round(fp * 1.2)
+    return f"""<style>
+  body {{ background:#161b26; color:#cdd6f4; font-family:Consolas,monospace; font-size:{body_px}px; margin:8px; }}
+  .section {{ color:#4e9eff; font-size:{sec_px}px; letter-spacing:1px; text-transform:uppercase;
+              margin-top:16px; margin-bottom:6px; border-bottom:1px solid #2a3347;
+              padding-bottom:3px; }}
+  .stat-row {{ margin:3px 0; font-size:{body_px}px; }}
+  .stat-label {{ color:#6c7a96; }}
+  .stat-val {{ color:#cdd6f4; font-weight:bold; }}
+  .file-header {{ margin-top:14px; margin-bottom:2px; padding:5px 10px;
+                  background:#1e2535; border-left:3px solid #f38ba8; color:#cdd6f4; }}
+  .file-warn   {{ border-left-color:#fab387; }}
+  .block-ad    {{ margin:2px 0 2px 0px; padding:5px 10px; background:#2a1a22;
+                  border-left:4px solid #f38ba8; }}
+  .block-opt   {{ margin:2px 0 2px 0px; padding:5px 10px; background:#1a1f2e;
+                  border-left:4px solid #4e9eff; }}
+  .block-warn  {{ margin:2px 0 2px 0px; padding:5px 10px; background:#231f15;
+                  border-left:4px solid #fab387; }}
+  .block-text  {{ color:#ff9eb5; font-weight:bold; font-size:{body_px}px; }}
+  .block-text-warn {{ color:#ffc990; font-weight:bold; font-size:{body_px}px; }}
+  .block-ts    {{ color:#7dcfff; font-size:{ts_px}px; }}
+  .block-meta  {{ color:#6c7a96; font-size:{sec_px}px; margin-top:3px; }}
+  .tag-ad      {{ color:#ff9eb5; font-weight:bold; }}
+  .tag-warn    {{ color:#ffc990; font-weight:bold; }}
+  .tag-clean   {{ color:#9ece6a; font-weight:bold; }}
+  .reason      {{ color:#565f89; font-size:{sec_px}px; margin-right:6px; }}
+  .divider     {{ color:#2a3347; }}
+</style>"""
+
+
+def _batch_html_style_detail() -> str:
+    """CSS for the per-file detail report — scales with font size setting."""
+    fp = _get_fp()
+    body_px = round(fp * 1.3)
+    sec_px  = round(fp * 1.1)
+    ts_px   = round(fp * 1.2)
+    return f"""<style>
+  body {{ background:#161b26; color:#cdd6f4; font-family:Consolas,monospace;
+          font-size:{body_px}px; margin:8px; }}
+  .file-path {{ color:#6c7a96; font-size:{ts_px}px; word-break:break-all; }}
+  .file-name {{ color:#ffffff; font-weight:bold; font-size:{round(fp * 1.4)}px; }}
+  .summary   {{ margin:6px 0 12px 0; color:#6c7a96; font-size:{ts_px}px;
+                border-bottom:1px solid #2a3347; padding-bottom:6px; }}
+  .block-ad  {{ margin:4px 0; padding:6px 12px; background:#2a1a22;
+                border-left:4px solid #f38ba8; }}
+  .block-opt {{ margin:4px 0; padding:6px 12px; background:#1a1f2e;
+                border-left:4px solid #4e9eff; }}
+  .block-warn{{ margin:4px 0; padding:6px 12px; background:#231f15;
+                border-left:4px solid #fab387; }}
+  .block-kept{{ margin:4px 0; padding:6px 12px; background:#1e2535;
+                border-left:4px solid #6c7a96; }}
+  .tag-kept  {{ color:#6c7a96; font-style:italic; }}
+  .kept-text {{ color:#6c7a96; font-style:italic; text-decoration:line-through; }}
+  .tag-ad    {{ color:#ff9eb5; font-weight:bold; }}
+  .tag-warn  {{ color:#ffc990; font-weight:bold; }}
+  .ts        {{ color:#7dcfff; font-size:{ts_px}px; }}
+  .ad-text   {{ color:#ff9eb5; font-weight:bold; font-size:{body_px}px; }}
+  .opt-text  {{ color:#89b4fa; font-size:{body_px}px; }}
+  .warn-text {{ color:#ffc990; font-weight:bold; font-size:{body_px}px; }}
+  .rm        {{ color:#565f89; font-size:{sec_px}px; }}
+  .reason    {{ color:#565f89; font-size:{sec_px}px; margin-right:8px; }}
+  .clean-msg {{ color:#9ece6a; margin-top:12px; font-size:{body_px}px; }}
+</style>"""
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +250,7 @@ class BatchPanel(QWidget):
         folder_row = QHBoxLayout()
 
         self._lbl_folder = QLabel(STRINGS["batch_no_folder"])
-        self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
         self._lbl_folder.setSizePolicy(QSizePolicy.Policy.Expanding,
                                        QSizePolicy.Policy.Preferred)
 
@@ -202,7 +273,7 @@ class BatchPanel(QWidget):
         thresh_layout.setContentsMargins(12, 8, 12, 8)
 
         thresh_title = QLabel(STRINGS["sens_label"])
-        thresh_title.setStyleSheet(f"color: {FG}; font-size: 10pt; font-weight: bold;")
+        thresh_title.setStyleSheet(f"color: {FG}; font-size: {_get_fp()}pt; font-weight: bold;")
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(1)
@@ -211,15 +282,17 @@ class BatchPanel(QWidget):
         self._slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._slider.setTickInterval(1)
         self._slider.setFixedWidth(200)
+        self._slider.setAccessibleName(STRINGS["sens_label"])
+        self._slider.setAccessibleDescription(STRINGS["settings_sens_desc"])
 
         self._lbl_threshold = QLabel(THRESHOLD_LABELS[3])
-        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: 9pt;")
+        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: {_get_fps()}pt;")
 
         # Endpoint labels
         lbl_aggressive = QLabel(STRINGS["sens_more_aggressive"])
-        lbl_aggressive.setStyleSheet(f"color: {RED}; font-size: 8pt;")
+        lbl_aggressive.setStyleSheet(f"color: {RED}; font-size: {_get_fpt()}pt;")
         lbl_conservative = QLabel(STRINGS["sens_more_conservative"])
-        lbl_conservative.setStyleSheet(f"color: {GREEN}; font-size: 8pt;")
+        lbl_conservative.setStyleSheet(f"color: {GREEN}; font-size: {_get_fpt()}pt;")
 
         thresh_layout.addWidget(thresh_title)
         thresh_layout.addWidget(lbl_aggressive)
@@ -232,7 +305,7 @@ class BatchPanel(QWidget):
         action_row = QHBoxLayout()
 
         self._chk_warnings = QCheckBox(STRINGS["batch_chk_warnings"])
-        self._chk_warnings.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        self._chk_warnings.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._btn_scan = QPushButton(STRINGS["batch_btn_scan_all"])
         self._btn_scan.setObjectName("btn_clean_all")
@@ -259,6 +332,7 @@ class BatchPanel(QWidget):
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
+        self._progress.setAccessibleName(STRINGS["batch_btn_scan_all"])
 
         # ── Splitter: file list | detail ──────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -282,6 +356,7 @@ class BatchPanel(QWidget):
         self._result_list.setShowGrid(False)
         self._result_list.verticalHeader().setVisible(False)
         self._result_list.horizontalHeader().setSortIndicatorShown(True)
+        self._result_list.setAccessibleName(STRINGS["batch_lbl_scanned"])
         self._result_list.horizontalHeader().setSectionsClickable(True)
         self._result_list.setSortingEnabled(True)
         self._result_list.horizontalHeader().setStretchLastSection(False)
@@ -297,7 +372,7 @@ class BatchPanel(QWidget):
             f'QTableWidget::item {{ padding: 4px 8px; border-bottom: 1px solid {BORDER}; }}'
             f'QTableWidget::item:selected {{ background: #2a3f5f; color: #ffffff; }}'
             f'QHeaderView::section {{ background: {BG2}; color: {FG2}; border: none; '
-            f'border-bottom: 1px solid {BORDER}; padding: 4px 8px; font-size: 9pt; }}'
+            f'border-bottom: 1px solid {BORDER}; padding: 4px 8px; font-size: {_get_fps()}pt; }}'
         )
 
         self._btn_open_in_review = QPushButton(STRINGS["batch_btn_open_review"])
@@ -357,6 +432,16 @@ class BatchPanel(QWidget):
         self._btn_open_in_review.clicked.connect(self._open_in_review)
 
         self._btn_full_report.clicked.connect(self._show_full_report)
+
+        # Tab order
+        self.setTabOrder(self._btn_folder,    self._btn_clear)
+        self.setTabOrder(self._btn_clear,     self._slider)
+        self.setTabOrder(self._slider,        self._chk_warnings)
+        self.setTabOrder(self._chk_warnings,  self._btn_scan)
+        self.setTabOrder(self._btn_scan,      self._btn_save)
+        self.setTabOrder(self._btn_save,      self._result_list)
+        self.setTabOrder(self._result_list,   self._btn_open_in_review)
+        self.setTabOrder(self._btn_open_in_review, self._btn_full_report)
 
     # ── Status helper ─────────────────────────────────────────────────────
 
@@ -633,34 +718,8 @@ class BatchPanel(QWidget):
         def esc(s): 
             return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
 
-        html = [f"""
-<style>
-  body {{ background:#161b26; color:#cdd6f4; font-family:Consolas,monospace; font-size:13px; margin:8px; }}
-  .section {{ color:#4e9eff; font-size:11px; letter-spacing:1px; text-transform:uppercase;
-              margin-top:16px; margin-bottom:6px; border-bottom:1px solid #2a3347;
-              padding-bottom:3px; }}
-  .stat-row {{ margin:3px 0; font-size:13px; }}
-  .stat-label {{ color:#6c7a96; }}
-  .stat-val {{ color:#cdd6f4; font-weight:bold; }}
-  .file-header {{ margin-top:14px; margin-bottom:2px; padding:5px 10px;
-                  background:#1e2535; border-left:3px solid #f38ba8; color:#cdd6f4; }}
-  .file-warn   {{ border-left-color:#fab387; }}
-  .block-ad    {{ margin:2px 0 2px 0px; padding:5px 10px; background:#2a1a22;
-                  border-left:4px solid #f38ba8; }}
-  .block-opt   {{ margin:2px 0 2px 0px; padding:5px 10px; background:#1a1f2e;
-                  border-left:4px solid #4e9eff; }}
-  .block-warn  {{ margin:2px 0 2px 0px; padding:5px 10px; background:#231f15;
-                  border-left:4px solid #fab387; }}
-  .block-text  {{ color:#ff9eb5; font-weight:bold; font-size:13px; }}
-  .block-text-warn {{ color:#ffc990; font-weight:bold; font-size:13px; }}
-  .block-ts    {{ color:#7dcfff; font-size:12px; }}
-  .block-meta  {{ color:#6c7a96; font-size:11px; margin-top:3px; }}
-  .tag-ad      {{ color:#ff9eb5; font-weight:bold; }}
-  .tag-warn    {{ color:#ffc990; font-weight:bold; }}
-  .tag-clean   {{ color:#9ece6a; font-weight:bold; }}
-  .reason      {{ color:#565f89; font-size:11px; margin-right:6px; }}
-  .divider     {{ color:#2a3347; }}
-</style>
+        html = [_batch_html_style_summary()
+              + f"""
 <div class="section">{STRINGS["rpt_batch_summary"]}</div>
 <div class="stat-row"><span class="stat-label">{STRINGS["rpt_batch_threshold"]} </span>
   <span class="stat-val">regex_matches ≥ {t}</span></div>
@@ -766,33 +825,8 @@ class BatchPanel(QWidget):
         cleaning_opts = load_cleaning_options()
         ads, warns = _classify(fr.subtitle, t)
 
-        html = [f"""<style>
-  body {{ background:#161b26; color:#cdd6f4; font-family:Consolas,monospace;
-          font-size:13px; margin:8px; }}
-  .file-path {{ color:#6c7a96; font-size:12px; word-break:break-all; }}
-  .file-name {{ color:#ffffff; font-weight:bold; font-size:14px; }}
-  .summary   {{ margin:6px 0 12px 0; color:#6c7a96; font-size:12px;
-                border-bottom:1px solid #2a3347; padding-bottom:6px; }}
-  .block-ad  {{ margin:4px 0; padding:6px 12px; background:#2a1a22;
-                border-left:4px solid #f38ba8; }}
-  .block-opt {{ margin:4px 0; padding:6px 12px; background:#1a1f2e;
-                border-left:4px solid #4e9eff; }}
-  .block-warn{{ margin:4px 0; padding:6px 12px; background:#231f15;
-                border-left:4px solid #fab387; }}
-  .block-kept{{ margin:4px 0; padding:6px 12px; background:#1e2535;
-                border-left:4px solid #6c7a96; }}
-  .tag-kept  {{ color:#6c7a96; font-style:italic; }}
-  .kept-text {{ color:#6c7a96; font-style:italic; text-decoration:line-through; }}
-  .tag-ad    {{ color:#ff9eb5; font-weight:bold; }}
-  .tag-warn  {{ color:#ffc990; font-weight:bold; }}
-  .ts        {{ color:#7dcfff; font-size:12px; }}
-  .ad-text   {{ color:#ff9eb5; font-weight:bold; font-size:13px; }}
-  .opt-text  {{ color:#89b4fa; font-size:13px; }}
-  .warn-text {{ color:#ffc990; font-weight:bold; font-size:13px; }}
-  .rm        {{ color:#565f89; font-size:11px; }}
-  .reason    {{ color:#565f89; font-size:11px; margin-right:8px; }}
-  .clean-msg {{ color:#9ece6a; margin-top:12px; font-size:13px; }}
-</style>
+        html = [_batch_html_style_detail()
+              + f"""
 <div class="file-path">{esc(fr.path.parent)}/</div>
 <div class="file-name">{esc(fr.path.name)}</div>
 <div class="summary">
@@ -847,7 +881,7 @@ class BatchPanel(QWidget):
                     f'<td>{tag}&nbsp;<span class="rm">rm={b.regex_matches}</span>'
                     f'&nbsp;&nbsp;<span class="ts">[{esc(b.start)}]</span></td>'
                     f'<td align="right">'
-                    f'<a href="keep:{id(b)}" style="color:{btn_col};font-size:10pt;'
+                    f'<a href="keep:{id(b)}" style="color:{btn_col};font-size:{_get_fp()}pt;'
                     f'border:1px solid {BRD};padding:2px 10px;'
                     f'border-radius:3px;text-decoration:none;white-space:nowrap;">'
                     f'{btn_lbl}</a>'

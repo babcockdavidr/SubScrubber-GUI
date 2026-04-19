@@ -32,6 +32,7 @@ import sys
 
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .strings import STRINGS
+from .settings_dialog import get_font_pt_small as _get_fps
 
 from core.paths import list_profile_dirs, ensure_user_profiles_dir, USER_PROFILES_DIR
 
@@ -242,7 +243,7 @@ class AddPatternDialog(QDialog):
 
         hint = QLabel(STRINGS["addpattern_hint"])
         hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        hint.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
 
         self._regex_input = QLineEdit()
         self._regex_input.setText(self._suggested)
@@ -415,7 +416,7 @@ class RegexEditorPanel(QWidget):
         lbl = QLabel(
             STRINGS["regex_desc"]
         )
-        lbl.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        lbl.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
         self._btn_new_profile = QPushButton(STRINGS["regex_btn_new_profile"])
         self._btn_new_profile.setToolTip(STRINGS["tip_regex_new_profile"])
         self._btn_reload = QPushButton(STRINGS["regex_btn_reload"])
@@ -487,7 +488,7 @@ class RegexEditorPanel(QWidget):
         # Save / discard row
         save_row = QHBoxLayout()
         self._lbl_dirty = QLabel("")
-        self._lbl_dirty.setStyleSheet(f"color: {ORANGE}; font-size: 9pt;")
+        self._lbl_dirty.setStyleSheet(f"color: {ORANGE}; font-size: {_get_fps()}pt;")
         self._btn_save = QPushButton(STRINGS["regex_btn_save"])
         self._btn_save.setObjectName("btn_clean_all")
         self._btn_save.setEnabled(False)
@@ -520,6 +521,16 @@ class RegexEditorPanel(QWidget):
         self._btn_quick_add.clicked.connect(self._quick_add)
         self._btn_new_profile.clicked.connect(self._new_profile)
         self._btn_reload.clicked.connect(self._reload)
+
+        # Tab order
+        self.setTabOrder(self._profile_list,  self._btn_new_profile)
+        self.setTabOrder(self._btn_new_profile, self._btn_reload)
+        self.setTabOrder(self._btn_reload,    self._quick_key)
+        self.setTabOrder(self._quick_key,     self._quick_val)
+        self.setTabOrder(self._quick_val,     self._quick_section)
+        self.setTabOrder(self._quick_section, self._btn_quick_add)
+        self.setTabOrder(self._btn_quick_add, self._btn_save)
+        self.setTabOrder(self._btn_save,      self._btn_discard)
 
     # ── Profile list ──────────────────────────────────────────────────────
 
@@ -597,10 +608,10 @@ class RegexEditorPanel(QWidget):
         try:
             reload_engine()
             self._lbl_dirty.setText(STRINGS["regex_saved"])
-            self._lbl_dirty.setStyleSheet(f"color: {GREEN}; font-size: 9pt;")
+            self._lbl_dirty.setStyleSheet(f"color: {GREEN}; font-size: {_get_fps()}pt;")
         except Exception as e:
             self._lbl_dirty.setText(f"Saved, but reload failed: {e}")
-            self._lbl_dirty.setStyleSheet(f"color: {ORANGE}; font-size: 9pt;")
+            self._lbl_dirty.setStyleSheet(f"color: {ORANGE}; font-size: {_get_fps()}pt;")
 
         self.pattern_saved.emit()
 
@@ -712,7 +723,7 @@ class RegexEditorPanel(QWidget):
         try:
             reload_engine()
             self._lbl_dirty.setText("✓ Engine reloaded.")
-            self._lbl_dirty.setStyleSheet(f"color: {GREEN}; font-size: 9pt;")
+            self._lbl_dirty.setStyleSheet(f"color: {GREEN}; font-size: {_get_fps()}pt;")
         except Exception as e:
             QMessageBox.critical(self, "Reload failed", str(e))
 

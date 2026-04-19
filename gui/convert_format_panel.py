@@ -25,7 +25,7 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextBrowser, QFrame, QFileDialog, QComboBox,
+    QTextBrowser, QFrame, QFileDialog, QComboBox, QCheckBox,
 )
 
 from core.converter import (
@@ -34,6 +34,7 @@ from core.converter import (
 )
 from gui.strings import STRINGS
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, ORANGE, GREEN, RED
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ class ConvertDropZone(QFrame):
         super().__init__()
         self.setObjectName("drop_zone")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(max(90, round(90 * _get_fp() / 11)))
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -58,11 +59,11 @@ class ConvertDropZone(QFrame):
 
         msg = QLabel(STRINGS["cv_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        msg.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         fmt = QLabel(STRINGS["cv_drop_formats"])
         fmt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fmt.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        fmt.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
 
         browse = QPushButton(STRINGS["cv_btn_browse"])
         browse.setMaximumWidth(100)
@@ -148,7 +149,7 @@ class ConvertFormatPanel(QWidget):
         self._lbl_file.setStyleSheet(f"color: {FG2};")
 
         lbl_fmt = QLabel(STRINGS["cv_lbl_output_format"])
-        lbl_fmt.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_fmt.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._fmt_combo = QComboBox()
         self._fmt_combo.setStyleSheet(
@@ -158,6 +159,7 @@ class ConvertFormatPanel(QWidget):
             f"selection-background-color: {BG3}; selection-color: {FG}; "
             f"border: 1px solid {BORDER}; }}"
         )
+        self._fmt_combo.setAccessibleName(STRINGS["cv_lbl_output_format"])
         for fmt in FORMATS:
             self._fmt_combo.addItem(fmt.display_name, userData=fmt.identifier)
         self._fmt_combo.currentIndexChanged.connect(self._on_format_changed)
@@ -167,8 +169,12 @@ class ConvertFormatPanel(QWidget):
         self._btn_convert.setEnabled(False)
         self._btn_convert.clicked.connect(self._convert_single)
 
+        self._chk_backup = QCheckBox(STRINGS["cv_chk_backup"])
+        self._chk_backup.setStyleSheet(f"color: {FG};")
+
         sf_bar.addWidget(self._btn_clear)
         sf_bar.addWidget(self._lbl_file, stretch=1)
+        sf_bar.addWidget(self._chk_backup)
         sf_bar.addWidget(lbl_fmt)
         sf_bar.addWidget(self._fmt_combo)
         sf_bar.addWidget(self._btn_convert)
@@ -179,7 +185,7 @@ class ConvertFormatPanel(QWidget):
         self._lbl_lossy.setStyleSheet(
             f"color: {ORANGE}; background: transparent; "
             f"border: 1px solid {ORANGE}55; border-radius: 4px; "
-            f"padding: 5px 10px; font-size: 10pt;"
+            f"padding: 5px 10px; font-size: {_get_fp()}pt;"
         )
         self._lbl_lossy.setVisible(False)
 
@@ -201,7 +207,7 @@ class ConvertFormatPanel(QWidget):
         batch_bar = QHBoxLayout()
 
         lbl_folder = QLabel(STRINGS["cv_lbl_folder"])
-        lbl_folder.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_folder.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._lbl_folder = QLabel(STRINGS["cv_no_folder"])
         self._lbl_folder.setObjectName("file_status")
@@ -211,7 +217,7 @@ class ConvertFormatPanel(QWidget):
         self._btn_browse_folder.clicked.connect(self._browse_folder)
 
         lbl_tgt = QLabel(STRINGS["cv_lbl_target_format"])
-        lbl_tgt.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_tgt.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         self._batch_fmt_combo = QComboBox()
         self._batch_fmt_combo.setStyleSheet(
@@ -221,6 +227,7 @@ class ConvertFormatPanel(QWidget):
             f"selection-background-color: {BG3}; selection-color: {FG}; "
             f"border: 1px solid {BORDER}; }}"
         )
+        self._batch_fmt_combo.setAccessibleName(STRINGS["cv_lbl_target_format"])
         for fmt in FORMATS:
             self._batch_fmt_combo.addItem(fmt.display_name, userData=fmt.identifier)
 
@@ -229,9 +236,13 @@ class ConvertFormatPanel(QWidget):
         self._btn_convert_batch.setEnabled(False)
         self._btn_convert_batch.clicked.connect(self._convert_batch)
 
+        self._chk_backup_batch = QCheckBox(STRINGS["cv_chk_backup"])
+        self._chk_backup_batch.setStyleSheet(f"color: {FG};")
+
         batch_bar.addWidget(lbl_folder)
         batch_bar.addWidget(self._lbl_folder, stretch=1)
         batch_bar.addWidget(self._btn_browse_folder)
+        batch_bar.addWidget(self._chk_backup_batch)
         batch_bar.addWidget(lbl_tgt)
         batch_bar.addWidget(self._batch_fmt_combo)
         batch_bar.addWidget(self._btn_convert_batch)
@@ -245,6 +256,15 @@ class ConvertFormatPanel(QWidget):
         root.addWidget(self._results, stretch=1)
         root.addWidget(lbl_batch)
         root.addLayout(batch_bar)
+
+        # Tab order
+        self.setTabOrder(self._btn_clear,        self._fmt_combo)
+        self.setTabOrder(self._fmt_combo,         self._chk_backup)
+        self.setTabOrder(self._chk_backup,        self._btn_convert)
+        self.setTabOrder(self._btn_convert,       self._btn_browse_folder)
+        self.setTabOrder(self._btn_browse_folder, self._batch_fmt_combo)
+        self.setTabOrder(self._batch_fmt_combo,   self._chk_backup_batch)
+        self.setTabOrder(self._chk_backup_batch,  self._btn_convert_batch)
 
     # ── Status helper ─────────────────────────────────────────────────────
 
@@ -314,9 +334,10 @@ class ConvertFormatPanel(QWidget):
         self._set_status(STRINGS["cv_status_converting"])
 
         src = self._src_path
+        backup = self._chk_backup.isChecked()
 
         def _run():
-            result = convert_file(src, tgt_id)
+            result = convert_file(src, tgt_id, keep_backup=backup)
             self._signals.single_done.emit(result)
 
         threading.Thread(target=_run, daemon=True).start()
@@ -357,9 +378,10 @@ class ConvertFormatPanel(QWidget):
 
         self._btn_convert_batch.setEnabled(False)
         self._set_status(STRINGS["cv_status_converting"])
+        backup = self._chk_backup_batch.isChecked()
 
         def _run():
-            result = convert_folder(folder, tgt_id)
+            result = convert_folder(folder, tgt_id, keep_backup=backup)
             self._signals.batch_done.emit(result)
 
         threading.Thread(target=_run, daemon=True).start()

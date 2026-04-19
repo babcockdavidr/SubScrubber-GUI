@@ -31,15 +31,34 @@ from .strings import STRINGS
 from core import block_will_be_removed
 from core import VIDEO_EXTENSIONS
 from core.subtitle import ParsedSubtitle, SubBlock
+from . import colors as _colors
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 
-STYLESHEET = f"""
+def build_stylesheet() -> str:
+    """Build the application stylesheet from the current colour palette and font size."""
+    from gui.settings_dialog import load_font_size
+    _font_pt = {"small": 9, "medium": 11, "large": 14}.get(load_font_size(), 11)
+
+    # Read colour values fresh from the module so theme switches are reflected.
+    BG     = _colors.BG
+    BG2    = _colors.BG2
+    BG3    = _colors.BG3
+    BORDER = _colors.BORDER
+    FG     = _colors.FG
+    FG2    = _colors.FG2
+    ACCENT = _colors.ACCENT
+    RED    = _colors.RED
+    ORANGE = _colors.ORANGE
+    GREEN  = _colors.GREEN
+    YELLOW = _colors.YELLOW
+    return f"""
 QMainWindow, QWidget {{
     background: {BG};
     color: {FG};
     font-family: 'Consolas', 'Cascadia Code', 'JetBrains Mono', monospace;
-    font-size: 10pt;
+    font-size: {_font_pt}pt;
 }}
 
 /* ── Toolbar ── */
@@ -50,7 +69,7 @@ QToolBar {{
     padding: 4px 8px;
 }}
 QToolBar QLabel {{
-    font-size: 12pt;
+    font-size: {_font_pt + 2}pt;
     font-weight: bold;
     color: {ACCENT};
     letter-spacing: 2px;
@@ -63,7 +82,7 @@ QPushButton {{
     border: 1px solid {BORDER};
     border-radius: 4px;
     padding: 5px 14px;
-    font-size: 10pt;
+    font-size: {_get_fp()}pt;
 }}
 QPushButton:hover  {{ background: rgba(78, 158, 255, 0.1); border-color: {ACCENT}; }}
 QPushButton:pressed {{ background: rgba(78, 158, 255, 0.2); }}
@@ -150,14 +169,14 @@ QTextEdit {{
 /* ── Labels ── */
 QLabel#section_label {{
     color: {FG2};
-    font-size: 8pt;
+    font-size: {_get_fpt()}pt;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     padding: 4px 0 2px 0;
 }}
 QLabel#file_status {{
     color: {FG2};
-    font-size: 10pt;
+    font-size: {_get_fp()}pt;
     padding: 2px 4px;
 }}
 
@@ -186,14 +205,14 @@ QStatusBar {{
     background: {BG2};
     border-top: 1px solid {BORDER};
     color: {FG2};
-    font-size: 9pt;
+    font-size: {_get_fps()}pt;
     padding: 2px 8px;
 }}
 
 /* ── Checkbox ── */
 QCheckBox {{
     color: {FG2};
-    font-size: 10pt;
+    font-size: {_get_fp()}pt;
     spacing: 6px;
 }}
 QCheckBox::indicator {{
@@ -219,7 +238,7 @@ QTabBar::tab {{
     border: 1px solid {BORDER};
     border-bottom: none;
     padding: 5px 14px;
-    font-size: 10pt;
+    font-size: {_get_fp()}pt;
 }}
 QTabBar::tab:selected {{
     background: {BG3};
@@ -232,7 +251,7 @@ QGroupBox {{
     border: 1px solid {BORDER};
     border-radius: 4px;
     margin-top: 8px;
-    font-size: 9pt;
+    font-size: {_get_fps()}pt;
     color: {FG2};
     padding-top: 6px;
 }}
@@ -279,6 +298,11 @@ QFrame#drop_zone QPushButton:hover {{
     background: {BG3};
 }}
 """
+
+
+def apply_theme_to_app(theme_name: str) -> None:
+    """Save the theme name for the next launch."""
+    _colors.save_theme(theme_name)
 
 
 # ---------------------------------------------------------------------------
@@ -382,23 +406,20 @@ class DropZone(QFrame):
         super().__init__()
         self.setObjectName("drop_zone")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(110)
+        self.setMinimumHeight(max(130, round(130 * _get_fp() / 11)))
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         icon = QLabel("⬇")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet(f"font-size: 18pt; color: {FG2};")
+        _icon_pt = min(18, max(12, _get_fp() + 4))
+        icon.setStyleSheet(f"font-size: {_icon_pt}pt; color: {FG2};")
 
         msg = QLabel(STRINGS["sf_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
-
-        fmt = QLabel(STRINGS["sf_drop_formats"])
-        fmt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fmt.setWordWrap(True)
-        fmt.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        msg.setWordWrap(True)
+        msg.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         browse = QPushButton(STRINGS["sf_browse"])
         browse.setMaximumWidth(100)
@@ -407,7 +428,6 @@ class DropZone(QFrame):
 
         layout.addWidget(icon)
         layout.addWidget(msg)
-        layout.addWidget(fmt)
         layout.addWidget(browse, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def _browse(self):
@@ -442,6 +462,15 @@ class MainWindow(QMainWindow):
         self.resize(1200, 750)
         self.setMinimumSize(900, 600)
 
+        # Window icon
+        from core.paths import BASE_DIR
+        from PyQt6.QtGui import QIcon
+        for _icon_name in ("subforge.ico", "subforge.png"):
+            _icon_file = BASE_DIR / _icon_name
+            if _icon_file.exists():
+                self.setWindowIcon(QIcon(str(_icon_file)))
+                break
+
         self._subtitle: Optional[ParsedSubtitle] = None
         self._worker: Optional[AnalyzeWorker] = None
         self._file_queue: List[Path] = []
@@ -462,6 +491,18 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(16, 16))
         self.addToolBar(toolbar)
 
+        # App icon left of title
+        from core.paths import BASE_DIR
+        from PyQt6.QtGui import QPixmap
+        _icon_path = BASE_DIR / "subforge.png"
+        if _icon_path.exists():
+            _icon_lbl = QLabel()
+            _pix = QPixmap(str(_icon_path))
+            _icon_lbl.setPixmap(_pix.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio,
+                                             Qt.TransformationMode.SmoothTransformation))
+            _icon_lbl.setStyleSheet("padding: 0 4px 0 2px; background: transparent;")
+            toolbar.addWidget(_icon_lbl)
+
         title = QLabel(STRINGS["app_toolbar_label"])
         toolbar.addWidget(title)
 
@@ -471,7 +512,7 @@ class MainWindow(QMainWindow):
 
         self._btn_settings = QPushButton(STRINGS["app_btn_settings"])
         self._btn_settings.setStyleSheet(
-            f"font-size: 9pt; padding: 2px 10px; color: {FG2};"
+            f"font-size: {_get_fps()}pt; padding: 2px 10px; color: {FG2};"
             f"border: 1px solid {BORDER}; border-radius: 3px; background: transparent;"
         )
         self._btn_settings.setToolTip(STRINGS["tip_btn_settings"])
@@ -483,10 +524,10 @@ class MainWindow(QMainWindow):
         self._status.showMessage(STRINGS["msg_ready"])
         from core.updater import CURRENT_VERSION
         self._version_label = QLabel(CURRENT_VERSION)
-        self._version_label.setStyleSheet(f"color: {FG2}; font-size: 9pt; padding-right: 6px;")
+        self._version_label.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt; padding-right: 6px;")
         self._btn_check_updates = QPushButton(STRINGS["app_btn_check_updates"])
         self._btn_check_updates.setStyleSheet(
-            f"font-size: 9pt; padding: 1px 8px; color: {FG2};"
+            f"font-size: {_get_fps()}pt; padding: 1px 8px; color: {FG2};"
             f"border: 1px solid {BORDER}; border-radius: 3px; background: transparent;"
         )
         self._btn_check_updates.setToolTip(STRINGS["tip_btn_check_updates"])
@@ -495,7 +536,7 @@ class MainWindow(QMainWindow):
         # Scan elapsed timer — hidden until a scan is running
         self._scan_elapsed_label = QLabel()
         self._scan_elapsed_label.setStyleSheet(
-            f"color: {ACCENT}; font-size: 9pt; padding-right: 10px; font-family: monospace;"
+            f"color: {ACCENT}; font-size: {_get_fps()}pt; padding-right: 10px; font-family: monospace;"
         )
         self._scan_elapsed_label.setVisible(False)
         self._scan_elapsed_secs = 0
@@ -559,9 +600,9 @@ class MainWindow(QMainWindow):
         sf_thresh_lbl = QLabel(STRINGS["sens_label"])
         sf_thresh_lbl.setStyleSheet(f"color: {FG}; font-weight: bold;")
         lbl_agg = QLabel(STRINGS["sens_more_aggressive"])
-        lbl_agg.setStyleSheet(f"color: {RED}; font-size: 8pt;")
+        lbl_agg.setStyleSheet(f"color: {RED}; font-size: {_get_fpt()}pt;")
         lbl_con = QLabel(STRINGS["sens_more_conservative"])
-        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: 8pt;")
+        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: {_get_fpt()}pt;")
 
         self._sf_slider = QSlider(Qt.Orientation.Horizontal)
         self._sf_slider.setMinimum(1)
@@ -570,9 +611,11 @@ class MainWindow(QMainWindow):
         self._sf_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._sf_slider.setTickInterval(1)
         self._sf_slider.setFixedWidth(160)
+        self._sf_slider.setAccessibleName(STRINGS["sens_label"])
+        self._sf_slider.setAccessibleDescription(STRINGS["settings_sens_desc"])
 
         self._sf_lbl_threshold = QLabel(STRINGS["thresh_3"])
-        self._sf_lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: 9pt;")
+        self._sf_lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: {_get_fps()}pt;")
 
         sf_thresh_layout.addWidget(sf_thresh_lbl)
         sf_thresh_layout.addWidget(lbl_agg)
@@ -601,6 +644,7 @@ class MainWindow(QMainWindow):
 
         self._file_list = QListWidget()
         self._file_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._file_list.setAccessibleName(STRINGS["sf_lbl_file_queue"])
         # Set palette so the persistent selection bar is a neutral color
         # regardless of item foreground (status colors bleed through transparent backgrounds)
         from PyQt6.QtGui import QPalette, QColor as _QColor
@@ -628,6 +672,7 @@ class MainWindow(QMainWindow):
         lbl_blocks.setObjectName("section_label")
         self._block_list = QListWidget()
         self._block_list.setFont(QFont("Consolas", 11))
+        self._block_list.setAccessibleName(STRINGS["sf_lbl_subtitle_blocks"])
 
         block_layout.addWidget(lbl_blocks)
         block_layout.addWidget(self._block_list)
@@ -724,6 +769,19 @@ class MainWindow(QMainWindow):
         single_layout.addWidget(sf_thresh_frame)
         single_layout.addWidget(splitter, stretch=1)
         single_layout.addLayout(action_bar)
+
+        # Tab order: controls → file list → block list → action buttons → nav
+        self.setTabOrder(self._chk_dry_run,   self._chk_warnings)
+        self.setTabOrder(self._chk_warnings,   self._btn_open_folder)
+        self.setTabOrder(self._btn_open_folder, self._sf_slider)
+        self.setTabOrder(self._sf_slider,      self._file_list)
+        self.setTabOrder(self._file_list,      self._block_list)
+        self.setTabOrder(self._block_list,     self._btn_mark_ad)
+        self.setTabOrder(self._btn_mark_ad,    self._btn_keep)
+        self.setTabOrder(self._btn_keep,       self._btn_always_ad)
+        self.setTabOrder(self._btn_always_ad,  self._btn_prev)
+        self.setTabOrder(self._btn_prev,       self._btn_next)
+        self.setTabOrder(self._btn_next,       self._btn_clean_all)
 
         self._tabs.addTab(single_tab, STRINGS["tab_single_file"])
 
@@ -1391,7 +1449,11 @@ def launch_gui(preload: List[Path] = None):
 
     try:
         app = QApplication.instance() or QApplication(sys.argv)
-        app.setStyleSheet(STYLESHEET)
+        from gui.settings_dialog import load_font_size as _load_font_size
+        _font_pt = {"small": 9, "medium": 11, "large": 14}.get(_load_font_size(), 11)
+        from PyQt6.QtGui import QFont
+        app.setFont(QFont("Consolas", _font_pt))
+        app.setStyleSheet(build_stylesheet())
         win = MainWindow(preload=preload or [])
         win.show()
         if not is_setup_complete():

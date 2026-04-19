@@ -32,6 +32,7 @@ from gui.settings_dialog import load_default_sensitivity, load_cleaning_options
 from gui.strings import STRINGS
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from core import block_will_be_removed
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 THRESHOLD_LABELS = {
     1: STRINGS["thresh_1"],
@@ -46,10 +47,16 @@ THRESHOLD_LABELS = {
 # HTML helpers  (mirrors video_panel.py style for consistency)
 # ---------------------------------------------------------------------------
 
-HTML_STYLE = f"""<style>
+def _html_style() -> str:
+    from .settings_dialog import get_font_pt as _fp
+    fp  = _fp()
+    body_px = round(fp * 1.3)
+    sec_px  = round(fp * 1.1)
+    ts_px   = round(fp * 1.2)
+    return f"""<style>
   body {{ background:{BG2}; color:{FG}; font-family:Consolas,monospace;
-          font-size:13px; margin:8px; }}
-  .section  {{ color:{ACCENT}; font-size:11px; text-transform:uppercase;
+          font-size:{body_px}px; margin:8px; }}
+  .section  {{ color:{ACCENT}; font-size:{sec_px}px; text-transform:uppercase;
                letter-spacing:1px; margin-top:16px; margin-bottom:6px;
                border-bottom:1px solid {BORDER}; padding-bottom:3px; }}
   .meta-row {{ margin:3px 0; }}
@@ -63,13 +70,13 @@ HTML_STYLE = f"""<style>
                 border-left:4px solid {ORANGE}; }}
   .tag-ad    {{ color:#ff9eb5; font-weight:bold; }}
   .tag-warn  {{ color:#ffc990; font-weight:bold; }}
-  .ts        {{ color:#7dcfff; font-size:12px; }}
+  .ts        {{ color:#7dcfff; font-size:{ts_px}px; }}
   .ad-text   {{ color:#ff9eb5; }}
   .opt-text  {{ color:#89b4fa; }}
   .warn-text {{ color:#ffc990; }}
-  .reason    {{ color:#565f89; font-size:11px; margin-right:8px; }}
+  .reason    {{ color:#565f89; font-size:{sec_px}px; margin-right:8px; }}
   .clean-msg {{ color:{GREEN}; margin-top:10px; }}
-  .note      {{ color:{FG2}; font-size:11px; font-style:italic; margin-top:8px; }}
+  .note      {{ color:{FG2}; font-size:{sec_px}px; font-style:italic; margin-top:8px; }}
   .warn-msg  {{ color:{ORANGE}; margin-top:8px; }}
   .ok        {{ color:{GREEN}; margin-top:8px; }}
   .scanning  {{ color:{ACCENT}; margin-top:8px; }}
@@ -102,7 +109,7 @@ def _track_meta_rows(track: SubtitleTrack) -> str:
 
 
 def _pre_scan_html(track: SubtitleTrack) -> str:
-    parts = [HTML_STYLE, '<div class="section">Image Subtitle Track</div>']
+    parts = [_html_style(), '<div class="section">Image Subtitle Track</div>']
     parts.append(_track_meta_rows(track))
     if tesseract_available():
         parts.append(f'<div class="ok">{STRINGS["img_tess_ok"]}</div>')
@@ -114,14 +121,14 @@ def _pre_scan_html(track: SubtitleTrack) -> str:
 
 
 def _scanning_html(track: SubtitleTrack, status: str) -> str:
-    parts = [HTML_STYLE, '<div class="section">Image Subtitle Track</div>']
+    parts = [_html_style(), '<div class="section">Image Subtitle Track</div>']
     parts.append(_track_meta_rows(track))
     parts.append(f'<div class="scanning">⟳ {_esc(status)}</div>')
     return "\n".join(parts)
 
 
 def _post_scan_html(track: SubtitleTrack, threshold: int = 3) -> str:
-    parts = [HTML_STYLE, '<div class="section">Image Subtitle Track</div>']
+    parts = [_html_style(), '<div class="section">Image Subtitle Track</div>']
     parts.append(_track_meta_rows(track))
 
     if track.scan_error:
@@ -196,7 +203,7 @@ def _post_scan_html(track: SubtitleTrack, threshold: int = 3) -> str:
 
 def _welcome_html() -> str:
     return (
-        HTML_STYLE +
+        _html_style() +
         f'<div class="section">{STRINGS["tab_image_subs"]}</div>'
         f'<div class="note">{STRINGS["img_welcome_note"]}</div>'
     )
@@ -204,7 +211,7 @@ def _welcome_html() -> str:
 
 def _no_image_tracks_html() -> str:
     return (
-        HTML_STYLE +
+        _html_style() +
         f'<div class="section">{STRINGS["tab_image_subs"]}</div>'
         f'<div class="note">{STRINGS["img_no_tracks_note"]}</div>'
     )
@@ -274,7 +281,7 @@ class ImageSubsDropZone(QFrame):
         super().__init__()
         self.setObjectName("drop_zone")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(max(90, round(90 * _get_fp() / 11)))
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon = QLabel("🎬")
@@ -282,7 +289,7 @@ class ImageSubsDropZone(QFrame):
         icon.setStyleSheet("font-size: 18pt;")
         msg = QLabel(STRINGS["img_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        msg.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
         browse = QPushButton(STRINGS["img_btn_browse"])
         browse.setMaximumWidth(100)
         browse.setToolTip(STRINGS["tip_img_browse"])
@@ -337,19 +344,11 @@ class ImageSubsPanel(QWidget):
         root.setSpacing(6)
 
         # ── Notices ───────────────────────────────────────────────────────
-        # Permanent experimental warning — always visible
-        self._experimental_notice = QLabel(STRINGS["img_experimental"])
-        self._experimental_notice.setStyleSheet(
-            f"color: {YELLOW}; background: transparent; border: 1px solid {YELLOW}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
-        )
-        self._experimental_notice.setWordWrap(True)
-
         # Tesseract missing — conditionally visible
         self._tess_notice = QLabel()
         self._tess_notice.setStyleSheet(
             f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: {_get_fp()}pt;"
         )
         self._tess_notice.setWordWrap(True)
         self._tess_notice.setVisible(False)
@@ -377,6 +376,7 @@ class ImageSubsPanel(QWidget):
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
         self._progress.setRange(0, 0)
+        self._progress.setAccessibleName(STRINGS["img_btn_scan"])
 
         # ── Drop zone ─────────────────────────────────────────────────────
         self._drop_zone = ImageSubsDropZone()
@@ -398,13 +398,14 @@ class ImageSubsPanel(QWidget):
         self._tree.setFont(QFont("Consolas", 11))
         self._tree.setIndentation(0)
         self._tree.currentItemChanged.connect(self._on_track_selected)
+        self._tree.setAccessibleName(STRINGS["img_lbl_tracks"])
 
         action_bar = QHBoxLayout()
         # ── Sensitivity slider ────────────────────────────────────────────
         slider_bar = QHBoxLayout()
         slider_bar.setSpacing(8)
         lbl_sens = QLabel(STRINGS["sens_label"])
-        lbl_sens.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        lbl_sens.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(1)
         self._slider.setMaximum(5)
@@ -412,8 +413,10 @@ class ImageSubsPanel(QWidget):
         self._slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._slider.setTickInterval(1)
         self._slider.setFixedWidth(180)
+        self._slider.setAccessibleName(STRINGS["sens_label"])
+        self._slider.setAccessibleDescription(STRINGS["settings_sens_desc"])
         self._lbl_threshold = QLabel(THRESHOLD_LABELS.get(self._threshold, ""))
-        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: 9pt;")
+        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: {_get_fps()}pt;")
         self._slider.valueChanged.connect(self._on_threshold_changed)
         slider_bar.addWidget(lbl_sens)
         slider_bar.addWidget(self._slider)
@@ -492,14 +495,14 @@ class ImageSubsPanel(QWidget):
             f"QTableWidget::item:selected {{ background: #2a3f5f; color: #ffffff; }}"
             f"QHeaderView::section {{ background: {BG2}; color: {FG2}; "
             f"border: none; border-bottom: 1px solid {BORDER}; "
-            f"padding: 4px 6px; font-size: 9pt; }}"
+            f"padding: 4px 6px; font-size: {_get_fps()}pt; }}"
         )
         self._edit_table.itemChanged.connect(self._on_cell_edited)
         self._detail_stack.addWidget(self._edit_table)    # index 1
 
         self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
         self._lbl_edit_hint.setStyleSheet(
-            f"color: {FG2}; font-size: 9pt; font-style: italic; padding: 2px 0;"
+            f"color: {FG2}; font-size: {_get_fps()}pt; font-style: italic; padding: 2px 0;"
         )
         self._lbl_edit_hint.setWordWrap(True)
         self._lbl_edit_hint.setVisible(False)
@@ -512,12 +515,20 @@ class ImageSubsPanel(QWidget):
         splitter.addWidget(right)
         splitter.setSizes([340, 660])
 
-        root.addWidget(self._experimental_notice)
         root.addWidget(self._tess_notice)
         root.addLayout(ctrl)
         root.addWidget(self._drop_zone)
         root.addWidget(self._progress)
         root.addWidget(splitter, stretch=1)
+
+        # Tab order
+        self.setTabOrder(self._btn_clear,        self._btn_scan)
+        self.setTabOrder(self._btn_scan,         self._tree)
+        self.setTabOrder(self._tree,             self._slider)
+        self.setTabOrder(self._slider,           self._chk_backup)
+        self.setTabOrder(self._chk_backup,       self._chk_keep_original)
+        self.setTabOrder(self._chk_keep_original, self._btn_save_srt)
+        self.setTabOrder(self._btn_save_srt,     self._btn_remux)
 
     # ── Status helper ─────────────────────────────────────────────────────
 

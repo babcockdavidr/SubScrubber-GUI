@@ -27,7 +27,7 @@ import webbrowser
 from core.cleaner_options import CleaningOptions
 from core.mkvtoolnix import get_mkvmerge_path, set_mkvmerge_path, mkvmerge_available
 from core.whisper import get_model_dir, set_model_dir, clear_model_dir
-from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
+from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW, get_theme
 from .strings import STRINGS
 
 from core.paths import load_settings as _load_settings, save_settings as _save_settings
@@ -37,6 +37,33 @@ from core.paths import load_settings as _load_settings, save_settings as _save_s
 # Persistence helpers
 # ---------------------------------------------------------------------------
 
+
+
+def load_font_size() -> str:
+    """Load saved font size from settings.json. Returns 'medium' if not set."""
+    return _load_settings().get("font_size", "medium")
+
+
+def save_font_size(size: str) -> None:
+    """Persist font size to settings.json."""
+    s = dict(_load_settings())
+    s["font_size"] = size
+    _save_settings(s)
+
+
+def get_font_pt() -> int:
+    """Return the current base font size in points (body text)."""
+    return {"small": 9, "medium": 11, "large": 14}.get(load_font_size(), 11)
+
+
+def get_font_pt_small() -> int:
+    """Return the current small font size in points (secondary text)."""
+    return get_font_pt() - 1
+
+
+def get_font_pt_tiny() -> int:
+    """Return the current tiny font size in points (labels, badges)."""
+    return max(get_font_pt() - 2, 7)
 
 
 def load_default_sensitivity() -> int:
@@ -168,14 +195,14 @@ class SettingsDialog(QDialog):
         btn_bar.addStretch()
         self._btn_cancel = QPushButton(STRINGS["settings_btn_cancel"])
         self._btn_cancel.setStyleSheet(
-            f"padding: 6px 18px; font-size: 10pt; color: {FG2}; "
+            f"padding: 6px 18px; font-size: {get_font_pt()}pt; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
         self._btn_cancel.setToolTip(STRINGS["tip_settings_cancel"])
         self._btn_cancel.clicked.connect(self.reject)
         self._btn_save = QPushButton(STRINGS["settings_btn_save"])
         self._btn_save.setStyleSheet(
-            f"padding: 6px 18px; font-size: 10pt; color: {BG}; "
+            f"padding: 6px 18px; font-size: {get_font_pt()}pt; color: {BG}; "
             f"border: none; border-radius: 3px; background: {ACCENT};"
         )
         self._btn_save.setToolTip(STRINGS["tip_settings_save"])
@@ -194,6 +221,31 @@ class SettingsDialog(QDialog):
 
         # Load current values
         self._load_current_values()
+
+        # Tab order — General tab controls → cleaning checkboxes → path inputs → buttons
+        self.setTabOrder(self._sens_slider,      self._lang_combo)
+        self.setTabOrder(self._lang_combo,       self._theme_combo)
+        self.setTabOrder(self._theme_combo,      self._font_combo)
+        self.setTabOrder(self._font_combo,       self._chk_music)
+        self.setTabOrder(self._chk_music,        self._chk_sdh)
+        self.setTabOrder(self._chk_sdh,          self._chk_speakers)
+        self.setTabOrder(self._chk_speakers,     self._chk_tags)
+        self.setTabOrder(self._chk_tags,         self._chk_tag_italic)
+        self.setTabOrder(self._chk_tag_italic,   self._chk_tag_bold)
+        self.setTabOrder(self._chk_tag_bold,     self._chk_br_curly)
+        self.setTabOrder(self._chk_br_curly,     self._chk_br_square)
+        self.setTabOrder(self._chk_br_square,    self._chk_br_parens)
+        self.setTabOrder(self._chk_br_parens,    self._chk_br_asterisk)
+        self.setTabOrder(self._chk_br_asterisk,  self._chk_br_hash)
+        self.setTabOrder(self._chk_br_hash,      self._chk_norm_case)
+        self.setTabOrder(self._chk_norm_case,    self._chk_merge_dupe)
+        self.setTabOrder(self._chk_merge_dupe,   self._mkv_path_input)
+        self.setTabOrder(self._mkv_path_input,   self._ffmpeg_path_input)
+        self.setTabOrder(self._ffmpeg_path_input, self._ffprobe_path_input)
+        self.setTabOrder(self._ffprobe_path_input, self._tess_path_input)
+        self.setTabOrder(self._tess_path_input,  self._whisper_dir_input)
+        self.setTabOrder(self._whisper_dir_input, self._btn_cancel)
+        self.setTabOrder(self._btn_cancel,       self._btn_save)
 
     # ── General tab ───────────────────────────────────────────────────────
 
@@ -217,14 +269,14 @@ class SettingsDialog(QDialog):
 
         sens_desc = QLabel(STRINGS["settings_sens_desc"])
         sens_desc.setWordWrap(True)
-        sens_desc.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        sens_desc.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
         sens_layout.addWidget(sens_desc)
 
         slider_row = QHBoxLayout()
         lbl_agg = QLabel(STRINGS["sens_more_aggressive"])
-        lbl_agg.setStyleSheet(f"color: {RED}; font-size: 9pt;")
+        lbl_agg.setStyleSheet(f"color: {RED}; font-size: {get_font_pt_small()}pt;")
         lbl_con = QLabel(STRINGS["sens_more_conservative"])
-        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: 9pt;")
+        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt_small()}pt;")
 
         self._sens_slider = QSlider(Qt.Orientation.Horizontal)
         self._sens_slider.setMinimum(1)
@@ -233,6 +285,8 @@ class SettingsDialog(QDialog):
         self._sens_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._sens_slider.setTickInterval(1)
         self._sens_slider.setFixedWidth(200)
+        self._sens_slider.setAccessibleName(STRINGS["settings_grp_sensitivity"])
+        self._sens_slider.setAccessibleDescription(STRINGS["settings_sens_desc"])
 
         _labels = {
             1: STRINGS["thresh_1"],
@@ -242,7 +296,7 @@ class SettingsDialog(QDialog):
             5: STRINGS["thresh_5"],
         }
         self._lbl_sens_val = QLabel(_labels.get(self._sens_slider.value(), ""))
-        self._lbl_sens_val.setStyleSheet(f"color: {YELLOW}; font-size: 10pt;")
+        self._lbl_sens_val.setStyleSheet(f"color: {YELLOW}; font-size: {get_font_pt()}pt;")
         self._sens_slider.valueChanged.connect(
             lambda v: self._lbl_sens_val.setText(_labels.get(v, str(v)))
         )
@@ -268,7 +322,7 @@ class SettingsDialog(QDialog):
         lang_layout = QVBoxLayout(lang_grp)
         lang_row = QHBoxLayout()
         lang_lbl = QLabel(STRINGS["settings_lbl_language"])
-        lang_lbl.setStyleSheet(f"color: {FG}; font-size: 10pt;")
+        lang_lbl.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
         self._lang_combo = QComboBox()
         self._lang_codes = list(LANGUAGES.keys())
         for code in self._lang_codes:
@@ -278,26 +332,77 @@ class SettingsDialog(QDialog):
             self._lang_combo.setCurrentIndex(self._lang_codes.index(current_lang))
         self._lang_combo.setStyleSheet(
             f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
-            f"border-radius: 3px; padding: 3px 8px; font-size: 10pt;"
+            f"border-radius: 3px; padding: 3px 8px; font-size: {get_font_pt()}pt;"
         )
+        self._lang_combo.setAccessibleName(STRINGS["settings_lbl_language"])
         lang_row.addWidget(lang_lbl)
         lang_row.addWidget(self._lang_combo)
         lang_row.addStretch()
         lang_layout.addLayout(lang_row)
         outer.addWidget(lang_grp)
 
-        future_grp = QGroupBox(STRINGS["settings_future_grp"])
-        future_grp.setStyleSheet(
+        # ── Appearance (Theme) ────────────────────────────────────────────
+        from PyQt6.QtWidgets import QComboBox as _QComboBox
+        appear_grp = QGroupBox(STRINGS["settings_grp_appearance"])
+        appear_grp.setStyleSheet(
             f"QGroupBox {{ border: 1px solid {BORDER}; border-radius: 4px; "
             f"color: {FG2}; margin-top: 8px; padding-top: 6px; }}"
             f"QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}"
         )
-        future_layout = QVBoxLayout(future_grp)
-        for label in [STRINGS["settings_future_theme"], STRINGS["settings_future_font"], STRINGS["settings_future_lang"]]:
-            lbl = QLabel(f"○  {label}")
-            lbl.setStyleSheet(f"color: {FG2}; font-size: 10pt; padding: 2px 0;")
-            future_layout.addWidget(lbl)
-        outer.addWidget(future_grp)
+        appear_layout = QVBoxLayout(appear_grp)
+        theme_row = QHBoxLayout()
+        theme_lbl = QLabel(STRINGS["settings_lbl_theme"])
+        theme_lbl.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
+        self._theme_combo = _QComboBox()
+        self._theme_names  = ["dark", "light", "high_contrast", "amoled"]
+        self._theme_labels = [
+            STRINGS["settings_theme_dark"],
+            STRINGS["settings_theme_light"],
+            STRINGS["settings_theme_hc"],
+            STRINGS["settings_theme_amoled"],
+        ]
+        for label in self._theme_labels:
+            self._theme_combo.addItem(label)
+        current_theme = get_theme()
+        if current_theme in self._theme_names:
+            self._theme_combo.setCurrentIndex(self._theme_names.index(current_theme))
+        self._theme_combo.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; padding: 3px 8px; font-size: {get_font_pt()}pt;"
+        )
+        self._theme_combo.setAccessibleName(STRINGS["settings_lbl_theme"])
+        theme_row.addWidget(theme_lbl)
+        theme_row.addWidget(self._theme_combo)
+        theme_row.addStretch()
+        appear_layout.addLayout(theme_row)
+
+        # Font size row
+        font_row = QHBoxLayout()
+        font_lbl = QLabel(STRINGS["settings_lbl_font_size"])
+        font_lbl.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
+        self._font_combo = _QComboBox()
+        self._font_size_names  = ["small", "medium", "large"]
+        self._font_size_labels = [
+            STRINGS["settings_font_small"],
+            STRINGS["settings_font_medium"],
+            STRINGS["settings_font_large"],
+        ]
+        for label in self._font_size_labels:
+            self._font_combo.addItem(label)
+        current_font = load_font_size()
+        if current_font in self._font_size_names:
+            self._font_combo.setCurrentIndex(self._font_size_names.index(current_font))
+        self._font_combo.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; padding: 3px 8px; font-size: {get_font_pt()}pt;"
+        )
+        self._font_combo.setAccessibleName(STRINGS["settings_lbl_font_size"])
+        font_row.addWidget(font_lbl)
+        font_row.addWidget(self._font_combo)
+        font_row.addStretch()
+        appear_layout.addLayout(font_row)
+
+        outer.addWidget(appear_grp)
 
         outer.addStretch()
         self._tabs.addTab(tab, STRINGS["settings_tab_general"])
@@ -313,14 +418,14 @@ class SettingsDialog(QDialog):
 
         desc = QLabel(STRINGS["settings_cleaning_desc"])
         desc.setWordWrap(True)
-        desc.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        desc.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
         outer.addWidget(desc)
 
         # SDH accessibility warning — shown when SDH checkbox is ticked
         self._lbl_sdh_warn = QLabel(STRINGS["settings_sdh_warn"])
         self._lbl_sdh_warn.setWordWrap(True)
         self._lbl_sdh_warn.setStyleSheet(
-            f"color: {ORANGE}; font-size: 9pt; font-style: italic; "
+            f"color: {ORANGE}; font-size: {get_font_pt_small()}pt; font-style: italic; "
             f"background: transparent; padding: 4px 0;"
         )
         self._lbl_sdh_warn.setVisible(False)
@@ -340,14 +445,14 @@ class SettingsDialog(QDialog):
 
         def chk(label, tooltip=""):
             c = QCheckBox(label)
-            c.setStyleSheet(f"color: {FG}; font-size: 10pt;")
+            c.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
             if tooltip:
                 c.setToolTip(tooltip)
             return c
 
         def sub_chk(label, tooltip=""):
             c = QCheckBox(label)
-            c.setStyleSheet(f"color: {FG2}; font-size: 10pt; margin-left: 22px;")
+            c.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt; margin-left: 22px;")
             if tooltip:
                 c.setToolTip(tooltip)
             return c
@@ -355,7 +460,7 @@ class SettingsDialog(QDialog):
         def section_label(text):
             lbl = QLabel(text)
             lbl.setStyleSheet(
-                f"color: {ACCENT}; font-size: 10pt; font-weight: bold; "
+                f"color: {ACCENT}; font-size: {get_font_pt()}pt; font-weight: bold; "
                 f"margin-top: 6px;"
             )
             return lbl
@@ -438,7 +543,7 @@ class SettingsDialog(QDialog):
         # Tagline
         lbl_tag = QLabel(STRINGS["settings_about_tagline"])
         lbl_tag.setWordWrap(True)
-        lbl_tag.setStyleSheet(f"color: {FG}; font-size: 10pt;")
+        lbl_tag.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
         outer.addWidget(lbl_tag)
 
         outer.addSpacing(24)
@@ -456,14 +561,14 @@ class SettingsDialog(QDialog):
             f'style="color: {ACCENT};">github.com/babcockdavidr/SubForge</a>'
         )
         lbl_github.setOpenExternalLinks(True)
-        lbl_github.setStyleSheet("font-size: 10pt;")
+        lbl_github.setStyleSheet("font-size: {get_font_pt()}pt;")
         outer.addWidget(lbl_github)
 
         outer.addSpacing(24)
 
         # License
         lbl_license = QLabel(STRINGS["settings_about_license"])
-        lbl_license.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        lbl_license.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
         outer.addWidget(lbl_license)
 
         outer.addSpacing(8)
@@ -475,7 +580,7 @@ class SettingsDialog(QDialog):
             + STRINGS["settings_about_credit"]
         )
         lbl_credit.setOpenExternalLinks(True)
-        lbl_credit.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        lbl_credit.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt_small()}pt;")
         outer.addWidget(lbl_credit)
 
         outer.addStretch()
@@ -483,7 +588,7 @@ class SettingsDialog(QDialog):
         # Report an Issue button
         btn_issue = QPushButton(STRINGS["settings_btn_report_issue"])
         btn_issue.setStyleSheet(
-            f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
+            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
         btn_issue.setToolTip(STRINGS["tip_settings_report_issue"])
@@ -492,20 +597,30 @@ class SettingsDialog(QDialog):
         ))
         btn_whats_new = QPushButton(STRINGS["settings_btn_whats_new"])
         btn_whats_new.setStyleSheet(
-            f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
+            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
         btn_whats_new.setToolTip(STRINGS["tip_settings_whats_new"])
         btn_whats_new.clicked.connect(self._show_changelog)
         btn_log = QPushButton(STRINGS["settings_btn_view_log"])
         btn_log.setStyleSheet(
-            f"font-size: 10pt; padding: 6px 16px; color: {FG2}; "
+            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
             f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
         )
         btn_log.setToolTip(STRINGS["tip_settings_view_log"])
         btn_log.clicked.connect(self._show_error_log)
+
+        btn_data = QPushButton(STRINGS["settings_btn_open_data_folder"])
+        btn_data.setStyleSheet(
+            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
+            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
+        )
+        btn_data.setToolTip(STRINGS["tip_settings_open_data_folder"])
+        btn_data.clicked.connect(self._open_data_folder)
+
         btn_row = QHBoxLayout()
         btn_row.addStretch()
+        btn_row.addWidget(btn_data)
         btn_row.addWidget(btn_log)
         btn_row.addWidget(btn_whats_new)
         btn_row.addWidget(btn_issue)
@@ -537,7 +652,7 @@ class SettingsDialog(QDialog):
 
         # Path label
         lbl_path = QLabel(str(get_log_path()))
-        lbl_path.setStyleSheet(f"color: {FG2}; font-size: 9pt; font-family: Consolas, monospace;")
+        lbl_path.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt_small()}pt; font-family: Consolas, monospace;")
         lbl_path.setWordWrap(True)
         layout.addWidget(lbl_path)
 
@@ -547,7 +662,7 @@ class SettingsDialog(QDialog):
         txt.setReadOnly(True)
         txt.setStyleSheet(
             f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
-            f"border-radius: 4px; font-family: Consolas, monospace; font-size: 9pt;"
+            f"border-radius: 4px; font-family: Consolas, monospace; font-size: {get_font_pt_small()}pt;"
         )
         txt.setPlainText(log_text if log_text else STRINGS["settings_log_empty"])
         layout.addWidget(txt, stretch=1)
@@ -580,6 +695,12 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         dlg.exec()
+
+    def _open_data_folder(self):
+        from core.paths import USER_DIR
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(USER_DIR)))
 
     def _build_paths_tab(self):
         from core.ffprobe import get_ffmpeg_path, get_ffprobe_path, ffmpeg_available, ffprobe_available
@@ -623,7 +744,7 @@ class SettingsDialog(QDialog):
             gl = QVBoxLayout(grp)
             info = QLabel(info_text)
             info.setWordWrap(True)
-            info.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+            info.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
             path_row = QHBoxLayout()
             inp = QLineEdit()
             inp.setPlaceholderText(placeholder)
@@ -637,7 +758,7 @@ class SettingsDialog(QDialog):
             path_row.addWidget(btn)
             lbl = QLabel("")
             lbl.setWordWrap(True)
-            lbl.setStyleSheet("font-size: 10pt;")
+            lbl.setStyleSheet("font-size: {get_font_pt()}pt;")
             lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             gl.addWidget(info)
             gl.addLayout(path_row)
@@ -703,7 +824,7 @@ class SettingsDialog(QDialog):
         wgl = QVBoxLayout(wgrp)
         winfo = QLabel(STRINGS["settings_whisper_info"])
         winfo.setWordWrap(True)
-        winfo.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        winfo.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
         wpath_row = QHBoxLayout()
         self._whisper_dir_input = QLineEdit()
         self._whisper_dir_input.setPlaceholderText(STRINGS["settings_whisper_placeholder"])
@@ -717,7 +838,7 @@ class SettingsDialog(QDialog):
         wpath_row.addWidget(btn_browse_whisper)
         self._lbl_whisper_status = QLabel("")
         self._lbl_whisper_status.setWordWrap(True)
-        self._lbl_whisper_status.setStyleSheet("font-size: 10pt;")
+        self._lbl_whisper_status.setStyleSheet("font-size: {get_font_pt()}pt;")
         wgl.addWidget(winfo)
         wgl.addLayout(wpath_row)
         wgl.addWidget(self._lbl_whisper_status)
@@ -740,18 +861,18 @@ class SettingsDialog(QDialog):
         path = self._mkv_path_input.text().strip()
         if path and Path(path).is_file():
             self._lbl_mkv_status.setText(STRINGS["settings_mkv_found"])
-            self._lbl_mkv_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_mkv_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         elif path:
             self._lbl_mkv_status.setText(STRINGS["settings_mkv_not_found"])
-            self._lbl_mkv_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+            self._lbl_mkv_status.setStyleSheet(f"color: {RED}; font-size: {get_font_pt()}pt;")
         elif mkvmerge_available():
             self._lbl_mkv_status.setText(
                 STRINGS["settings_mkv_on_path"].format(path=get_mkvmerge_path())
             )
-            self._lbl_mkv_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_mkv_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         else:
             self._lbl_mkv_status.setText(STRINGS["settings_mkv_missing"])
-            self._lbl_mkv_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_mkv_status.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
 
     def _browse_ffmpeg(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -766,18 +887,18 @@ class SettingsDialog(QDialog):
         path = self._ffmpeg_path_input.text().strip()
         if path and Path(path).is_file():
             self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_found"])
-            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         elif path:
             self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_not_found"])
-            self._lbl_ffmpeg_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {RED}; font-size: {get_font_pt()}pt;")
         elif ffmpeg_available():
             self._lbl_ffmpeg_status.setText(
                 STRINGS["settings_tool_on_path"].format(path=get_ffmpeg_path())
             )
-            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         else:
             self._lbl_ffmpeg_status.setText(STRINGS["settings_tool_missing_ffmpeg"])
-            self._lbl_ffmpeg_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_ffmpeg_status.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
 
     def _browse_ffprobe(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -792,18 +913,18 @@ class SettingsDialog(QDialog):
         path = self._ffprobe_path_input.text().strip()
         if path and Path(path).is_file():
             self._lbl_ffprobe_status.setText(STRINGS["settings_tool_found"])
-            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         elif path:
             self._lbl_ffprobe_status.setText(STRINGS["settings_tool_not_found"])
-            self._lbl_ffprobe_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {RED}; font-size: {get_font_pt()}pt;")
         elif ffprobe_available():
             self._lbl_ffprobe_status.setText(
                 STRINGS["settings_tool_on_path"].format(path=get_ffprobe_path())
             )
-            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         else:
             self._lbl_ffprobe_status.setText(STRINGS["settings_tool_missing_ffprobe"])
-            self._lbl_ffprobe_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_ffprobe_status.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
 
     def _browse_tesseract(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -818,18 +939,18 @@ class SettingsDialog(QDialog):
         path = self._tess_path_input.text().strip()
         if path and Path(path).is_file():
             self._lbl_tess_status.setText(STRINGS["settings_tool_found"])
-            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         elif path:
             self._lbl_tess_status.setText(STRINGS["settings_tool_not_found"])
-            self._lbl_tess_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+            self._lbl_tess_status.setStyleSheet(f"color: {RED}; font-size: {get_font_pt()}pt;")
         elif tesseract_available():
             self._lbl_tess_status.setText(
                 STRINGS["settings_tool_on_path"].format(path=get_tesseract_path())
             )
-            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_tess_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
         else:
             self._lbl_tess_status.setText(STRINGS["settings_tesseract_missing"])
-            self._lbl_tess_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_tess_status.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
 
     def _browse_whisper_dir(self):
         path = QFileDialog.getExistingDirectory(
@@ -861,7 +982,7 @@ class SettingsDialog(QDialog):
                 self._lbl_whisper_status.setText(
                     STRINGS["settings_whisper_default"].format(path=str(_default)) + suffix
                 )
-            self._lbl_whisper_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_whisper_status.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
             return
 
         if path_text:
@@ -870,20 +991,23 @@ class SettingsDialog(QDialog):
                 self._lbl_whisper_status.setText(
                     STRINGS["settings_whisper_custom"].format(path=path_text)
                 )
-                self._lbl_whisper_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+                self._lbl_whisper_status.setStyleSheet(f"color: {GREEN}; font-size: {get_font_pt()}pt;")
             else:
                 self._lbl_whisper_status.setText(STRINGS["settings_whisper_not_found"])
-                self._lbl_whisper_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+                self._lbl_whisper_status.setStyleSheet(f"color: {RED}; font-size: {get_font_pt()}pt;")
         else:
             self._lbl_whisper_status.setText(
                 STRINGS["settings_whisper_default"].format(path=str(_default))
             )
-            self._lbl_whisper_status.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+            self._lbl_whisper_status.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
 
     # ── Load / Save ───────────────────────────────────────────────────────
 
     def _load_current_values(self):
         self._sens_slider.setValue(load_default_sensitivity())
+        current_font = load_font_size()
+        if current_font in self._font_size_names:
+            self._font_combo.setCurrentIndex(self._font_size_names.index(current_font))
         opts = load_cleaning_options()
         self._chk_music.setChecked(opts.remove_music_cues)
         self._chk_sdh.setChecked(opts.remove_sdh_annotations)
@@ -953,13 +1077,23 @@ class SettingsDialog(QDialog):
         else:
             clear_model_dir()
 
+        # Save theme
+        selected_theme = self._theme_names[self._theme_combo.currentIndex()]
+        prev_theme = get_theme()
+        from .colors import save_theme as _save_theme
+        _save_theme(selected_theme)
+
+        # Save font size
+        selected_font = self._font_size_names[self._font_combo.currentIndex()]
+        prev_font = load_font_size()
+        save_font_size(selected_font)
+
         self.accept()
 
-        # Offer restart if language changed — use a custom dialog so button
-        # labels come from STRINGS (already switched to the new language)
-        # rather than the OS-supplied Yes/No which ignores our translations.
-        if lang_code != prev_lang:
-            import sys, os, subprocess
+        # Offer restart if language, theme, or font size changed
+        need_restart = (lang_code != prev_lang) or (selected_theme != prev_theme) or (selected_font != prev_font)
+        if need_restart:
+            import sys, subprocess
             from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel,
                                          QHBoxLayout, QPushButton, QApplication)
             dlg = QDialog(None)
@@ -983,12 +1117,9 @@ class SettingsDialog(QDialog):
             _layout.addLayout(_btn_row)
             want_restart = dlg.exec() == QDialog.DialogCode.Accepted
             if want_restart:
-                # Frozen bundle: relaunch exe directly.
-                # Source: relaunch via Python interpreter.
                 frozen = getattr(sys, "frozen", False)
                 args = [sys.executable] if frozen else [sys.executable] + sys.argv
 
-                # Spawn new instance then exit — os.execv unreliable in frozen apps
                 creationflags = 0
                 if sys.platform == "win32":
                     DETACHED_PROCESS    = 0x00000008
@@ -996,10 +1127,6 @@ class SettingsDialog(QDialog):
                     creationflags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
 
                 subprocess.Popen(args, close_fds=True, creationflags=creationflags)
-                # Redirect stderr to null before quitting — faster_whisper/ctranslate2
-                # hold a logging handler that flushes sys.stderr during teardown.
-                # Qt sets sys.stderr to None on exit, which causes an AttributeError
-                # in transformers' logging shutdown. This silences it cleanly.
                 import io
                 sys.stderr = io.StringIO()
                 app = QApplication.instance()

@@ -33,6 +33,7 @@ from gui.settings_dialog import load_cleaning_options, load_default_sensitivity
 from gui.strings import STRINGS
 from core import block_will_be_removed
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
+from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
 THRESHOLD_LABELS = {
     1: STRINGS["thresh_1"],
@@ -224,11 +225,11 @@ def _track_html(result: VideoScanResult, track: SubtitleTrack,
                 f'<table width="100%" cellpadding="0" cellspacing="0">'
                 f'<tr>'
                 f'<td>{tag}&nbsp;<span class="ts">[{_esc(b.start)}]</span>'
-                f'&nbsp;<span style="color:{FG2};font-size:10pt;">'
+                f'&nbsp;<span style="color:{FG2};font-size:{_get_fp()}pt;">'
                 f'rm={b.regex_matches}</span></td>'
                 f'<td align="right">'
                 f'<a href="keep:{id(b)}" style="'
-                f'color:{btn_color};font-size:10pt;'
+                f'color:{btn_color};font-size:{_get_fp()}pt;'
                 f'border:1px solid {btn_border};'
                 f'padding:2px 10px;border-radius:3px;'
                 f'text-decoration:none;white-space:nowrap;">'
@@ -507,7 +508,7 @@ class VideoSettingsDialog(QDialog):
             "If it is not on your system PATH, specify the full path to mkvmerge.exe below."
         )
         info.setWordWrap(True)
-        info.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        info.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
         path_row = QHBoxLayout()
         self._path_input = QLineEdit()
         self._path_input.setPlaceholderText(r"e.g. C:\Program Files\MKVToolNix\mkvmerge.exe")
@@ -523,7 +524,7 @@ class VideoSettingsDialog(QDialog):
         path_row.addWidget(self._path_input, stretch=1)
         path_row.addWidget(btn_browse)
         self._lbl_status = QLabel("")
-        self._lbl_status.setStyleSheet(f"font-size: 10pt;")
+        self._lbl_status.setStyleSheet(f"font-size: {_get_fp()}pt;")
         self._check_status()
         gl.addWidget(info)
         gl.addLayout(path_row)
@@ -550,18 +551,18 @@ class VideoSettingsDialog(QDialog):
         path = self._path_input.text().strip()
         if path and Path(path).is_file():
             self._lbl_status.setText("✓ File found.")
-            self._lbl_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_status.setStyleSheet(f"color: {GREEN}; font-size: {_get_fp()}pt;")
         elif path:
             self._lbl_status.setText("✕ File not found at that path.")
-            self._lbl_status.setStyleSheet(f"color: {RED}; font-size: 10pt;")
+            self._lbl_status.setStyleSheet(f"color: {RED}; font-size: {_get_fp()}pt;")
         elif mkvmerge_available():
             self._lbl_status.setText(f"✓ mkvmerge found on PATH: {get_mkvmerge_path()}")
-            self._lbl_status.setStyleSheet(f"color: {GREEN}; font-size: 10pt;")
+            self._lbl_status.setStyleSheet(f"color: {GREEN}; font-size: {_get_fp()}pt;")
         else:
             self._lbl_status.setText(
                 "mkvmerge not found. Install MKVToolNix from https://mkvtoolnix.download/"
             )
-            self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: 10pt;")
+            self._lbl_status.setStyleSheet(f"color: {ORANGE}; font-size: {_get_fp()}pt;")
 
     def _save(self):
         path = self._path_input.text().strip()
@@ -581,7 +582,7 @@ class VideoDropZone(QFrame):
         super().__init__()
         self.setObjectName("drop_zone")
         self.setAcceptDrops(True)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(max(90, round(90 * _get_fp() / 11)))
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon = QLabel("🎬")
@@ -589,7 +590,7 @@ class VideoDropZone(QFrame):
         icon.setStyleSheet("font-size: 18pt;")
         msg = QLabel(STRINGS["video_drop_label"])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        msg.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
         browse = QPushButton("Browse…")
         browse.setMaximumWidth(100)
         browse.clicked.connect(self._browse)
@@ -656,7 +657,7 @@ class VideoScanPanel(QWidget):
         self._ffmpeg_notice = QLabel()
         self._ffmpeg_notice.setStyleSheet(
             f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: {_get_fp()}pt;"
         )
         self._ffmpeg_notice.setWordWrap(True)
         self._ffmpeg_notice.setVisible(False)
@@ -664,7 +665,7 @@ class VideoScanPanel(QWidget):
         self._mkv_notice = QLabel()
         self._mkv_notice.setStyleSheet(
             f"color: {ORANGE}; background: transparent; border: 1px solid {ORANGE}55;"
-            f"border-radius: 4px; padding: 6px 10px; font-size: 10pt;"
+            f"border-radius: 4px; padding: 6px 10px; font-size: {_get_fp()}pt;"
         )
         self._mkv_notice.setWordWrap(True)
         self._mkv_notice.setVisible(False)
@@ -686,7 +687,7 @@ class VideoScanPanel(QWidget):
         self._btn_stop_scan.setToolTip(STRINGS["tip_video_stop_scan"])
 
         self._lbl_folder = QLabel(STRINGS["video_no_folder"])
-        self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: 10pt;")
+        self._lbl_folder.setStyleSheet(f"color: {FG2}; font-size: {_get_fp()}pt;")
 
         ctrl.addWidget(self._btn_add_folder)
         ctrl.addWidget(self._btn_clear)
@@ -704,9 +705,9 @@ class VideoScanPanel(QWidget):
         lbl_s = QLabel(STRINGS["sens_label"])
         lbl_s.setStyleSheet(f"color: {FG}; font-weight: bold;")
         lbl_agg = QLabel(STRINGS["sens_more_aggressive"])
-        lbl_agg.setStyleSheet(f"color: {RED}; font-size: 9pt;")
+        lbl_agg.setStyleSheet(f"color: {RED}; font-size: {_get_fps()}pt;")
         lbl_con = QLabel(STRINGS["sens_more_conservative"])
-        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: 9pt;")
+        lbl_con.setStyleSheet(f"color: {GREEN}; font-size: {_get_fps()}pt;")
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(1)
         self._slider.setMaximum(5)
@@ -714,8 +715,10 @@ class VideoScanPanel(QWidget):
         self._slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._slider.setTickInterval(1)
         self._slider.setFixedWidth(180)
+        self._slider.setAccessibleName(STRINGS["sens_label"])
+        self._slider.setAccessibleDescription(STRINGS["settings_sens_desc"])
         self._lbl_threshold = QLabel(THRESHOLD_LABELS[3])
-        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: 9pt;")
+        self._lbl_threshold.setStyleSheet(f"color: {YELLOW}; font-size: {_get_fps()}pt;")
         tl.addWidget(lbl_s)
         tl.addWidget(lbl_agg)
         tl.addWidget(self._slider)
@@ -727,6 +730,7 @@ class VideoScanPanel(QWidget):
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         self._progress.setMaximumHeight(6)
+        self._progress.setAccessibleName(STRINGS["video_btn_scan"])
 
         # ── Drop zone ─────────────────────────────────────────────────
         self._drop_zone = VideoDropZone()
@@ -752,9 +756,10 @@ class VideoScanPanel(QWidget):
         self._tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self._tree.setColumnWidth(1, 36)
+        self._tree.setAccessibleName(STRINGS["video_lbl_files"])
 
         self._lbl_selected = QLabel(STRINGS["video_lbl_selected"])
-        self._lbl_selected.setStyleSheet(f"color: {FG2}; font-size: 9pt;")
+        self._lbl_selected.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
         self._lbl_selected.setWordWrap(True)
 
         remux_bar = QHBoxLayout()
@@ -857,14 +862,14 @@ class VideoScanPanel(QWidget):
             f"QTableWidget::item:selected {{ background: #2a3f5f; color: #ffffff; }}"
             f"QHeaderView::section {{ background: {BG2}; color: {FG2}; "
             f"border: none; border-bottom: 1px solid {BORDER}; "
-            f"padding: 4px 6px; font-size: 9pt; }}"
+            f"padding: 4px 6px; font-size: {_get_fps()}pt; }}"
         )
         self._edit_table.itemChanged.connect(self._on_cell_edited)
         self._detail_stack.addWidget(self._edit_table)    # index 1
 
         self._lbl_edit_hint = QLabel(STRINGS["tr_hint_edit"])
         self._lbl_edit_hint.setStyleSheet(
-            f"color: {FG2}; font-size: 9pt; font-style: italic; padding: 2px 0;"
+            f"color: {FG2}; font-size: {_get_fps()}pt; font-style: italic; padding: 2px 0;"
         )
         self._lbl_edit_hint.setWordWrap(True)
         self._lbl_edit_hint.setVisible(False)
@@ -903,6 +908,16 @@ class VideoScanPanel(QWidget):
         self._tree.currentItemChanged.connect(self._on_tree_selection)
         self._tree.itemChanged.connect(self._on_item_checked)
         self._detail_text.anchorClicked.connect(self._on_detail_link)
+
+        # Tab order
+        self.setTabOrder(self._btn_add_folder, self._btn_clear)
+        self.setTabOrder(self._btn_clear,      self._btn_scan)
+        self.setTabOrder(self._btn_scan,       self._slider)
+        self.setTabOrder(self._slider,         self._tree)
+        self.setTabOrder(self._tree,           self._chk_backup)
+        self.setTabOrder(self._chk_backup,     self._chk_warnings)
+        self.setTabOrder(self._chk_warnings,   self._btn_extract)
+        self.setTabOrder(self._btn_extract,    self._btn_remux)
 
     # ── Status helper ─────────────────────────────────────────────────────
 
@@ -1190,6 +1205,8 @@ class VideoScanPanel(QWidget):
         btn.setCheckable(True)
         btn.setChecked(marked)
         btn.setToolTip(STRINGS["tip_video_mark_delete"])
+        btn.setAccessibleName(STRINGS["video_btn_mark_delete"])
+        btn.setAccessibleDescription(STRINGS["tip_video_mark_delete"])
         btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {FG2}; border: none; "
             f"font-size: 11pt; padding: 0; }}"
