@@ -269,6 +269,29 @@ For generating subtitle files from a video's audio track using Whisper AI — en
 
 ---
 
+## Convert Format Tab
+
+For converting subtitle files between the seven supported formats — individually or across an entire folder in one pass.
+
+![Convert Format Tab](images/Convert_Screenshot.png)
+
+**Single file:**
+1. Drop a subtitle file onto the drop zone, or use **Browse**
+2. Choose the output format from the **Output format** dropdown
+3. If the conversion is known to be lossy (e.g. ASS/SSA styling, TTML/SAMI parser limits, MicroDVD framerate), an orange warning appears automatically — it never blocks the conversion
+4. Check **Keep backup** to copy the source file to `filename.backup.ext` before writing
+5. Click **Convert** — the output is written next to the source file using the same stem and the new extension
+
+**Batch:**
+1. Click **Browse** to choose a folder
+2. Choose the target format from the **Convert to** dropdown
+3. Check **Keep backup** to back up every source file before converting
+4. Click **Convert All** — SubForge processes every supported subtitle file in the folder and reports how many were converted, skipped (already in the target format), and failed
+
+**Supported formats:** SRT, ASS, SSA, WebVTT, TTML, SAMI, MicroDVD (.sub)
+
+---
+
 ## Regex Editor Tab
 
 For managing and editing the regex profiles that drive ad detection.
