@@ -1,81 +1,69 @@
 SubForge — Development Roadmap
-Last updated: v1.0.0 (complete) — next: v1.0.1
+Last updated: v1.0.1 (complete) — next: v1.1.0
 ================================================================================
-
-v1.0.0 — Accessibility, Themes & Release
---------------------------------------------------------------------------------
-  GOAL: Full accessibility pass, visual theme support, and the final polish
-  that makes SubForge worthy of a 1.0 label.
-
-  - [x] Add "Keep Backup" option to Convert tab for consistency across tabs.
-
-  - [x] Light theme, High Contrast theme, and AMOLED Black theme added alongside
-    the original Dark theme. Theme selector in Settings > General and in the
-    first-run setup wizard. Takes effect on restart. Stored in settings.json.
-
-  - [x] Font size setting in Settings > General: Small (9pt) / Medium (11pt) /
-    Large (14pt). Scales all UI text globally via QApplication.setFont and
-    per-widget stylesheet substitution. HTML report panels (Batch, Image Subs,
-    Transcribe) also scale via dynamic CSS px values. Drop zones expand to fit.
-
-  - [x] Keyboard navigation audit. setTabOrder() chains added to every panel
-    and the Settings dialog. Every interactive element reachable and operable
-    without a mouse. Sliders respond to arrow keys; checkboxes to Space;
-    buttons to Enter/Space.
-
-  - [x] Screen reader compatibility. setAccessibleName() and
-    setAccessibleDescription() added to all sliders, progress bars, list/tree/
-    table widgets, format combos, model/language combos, and icon-only buttons
-    (the ✕ delete buttons in Embedded Subs). Windows Narrator tested.
-
-  - [x] Final branding pass. Installer version bumped to 1.0.0. README and
-    CHANGELOG updated. App icon (subforge.ico) added to installer and PyInstaller
-    spec. Icon displayed in the toolbar and window title bar. subforge.png
-    bundled with the frozen exe via PyInstaller datas.
-
-  - [x] Experimental banners removed from Transcribe and Image Subs tabs.
-    Both features have been stable for several releases.
-
-  - [x] "Open data folder" button in Settings > About. Opens the directory that
-    holds settings.json, Whisper model cache, and logs in the system file
-    manager. Uses QDesktopServices.openUrl — cross-platform, no subprocess.
-      Windows frozen (.exe): %APPDATA%\SubForge
-      Windows/any from source: repo root (where settings.json lives)
-      macOS: ~/Library/Application Support/SubForge (placeholder — TBD)
-      Linux: ~/.local/share/SubForge (placeholder — TBD)
-
-  - [x] Release candidate period complete. Clean-machine install tested.
-    v1.0.0 tagged.
-
 
 v1.0.1 — Scheduled Scanning & Timing Tools
 --------------------------------------------------------------------------------
   GOAL: Background automation and the first timing manipulation tools.
 
-  - Scheduled scanning. New Settings tab or dialog (Scheduler) where the user
-    configures a folder, a schedule (hourly/nightly/weekly), and which cleaning
-    options to apply. SubForge checks the schedule on startup and runs any
-    overdue jobs in the background. Results are written to a scan log and a
-    system tray notification (or status bar message on next launch) reports
-    what was changed. The scheduler must not run during an active manual scan.
-    Store schedule config in settings.json under a "schedules" key.
+  - [x] Timestamp shift. Single File action bar button "Shift Timestamps…".
+    Offsets all blocks by a fixed ms value. Always absolute from original
+    timestamps — entering 0 restores the file exactly. Live before/after
+    preview of first 3 blocks reads from originals so it's always accurate.
+    Persists last used value per file. Non-destructive until Clean & Save.
+    Dialog uses direct button wiring (not buttons.accepted) to avoid Qt
+    double-fire race that caused only the first block to update.
 
-  - Watch folder (live). A secondary option alongside scheduled scanning: a
-    folder that SubForge monitors continuously while running. Any new subtitle
-    file that appears is automatically cleaned using the current global cleaning
-    settings. Useful for download folders. Uses QFileSystemWatcher — no polling.
-    Show a status bar badge when watch folder is active.
+  - [x] Timestamp stretch/compress. Companion "Stretch Timing…" button.
+    Two-anchor linear rescale for framerate drift correction. Pre-filled with
+    first/last block timestamps. Live preview of first/last block.
+    HH:MM:SS,mmm input format. Non-destructive until Clean & Save.
 
-  - Timestamp shift. A new tool accessible from the Single File tab action bar:
-    "Shift Timestamps…" opens a small dialog with a millisecond offset input
-    (positive or negative). Applies the offset to every block in the loaded
-    file. Preview shows the before/after timing of the first few blocks.
-    Uses the existing subtitle model — no new file format logic needed.
+  - [x] Watch folders (plural). New Settings > Watch Folders tab. Multiple
+    folders supported (different drives, movies vs TV). QFileSystemWatcher —
+    OS-level notifications, no polling. Fully recursive: top-level and all
+    subdirectories registered; new subdirs auto-added on creation.
+    File-size stability check (250 ms polls, 10 s timeout) before processing
+    — handles Windows Explorer copy lock without arbitrary sleep retries.
+    Existing-file warning dialog shows file count and current sensitivity;
+    requires explicit "I Understand" confirmation before cleaning.
+    Errors written to error log (append_error) as well as status bar.
+    Status bar badge shows active folder count. Persists in settings.json.
 
-  - Timestamp stretch/compress. Companion to shift: a "Stretch Timing…" dialog
-    that takes a start point and an end point (in ms) and linearly scales all
-    timestamps to fit. Corrects subtitle drift when a video has been re-encoded
-    at a different frame rate. Input fields accept HH:MM:SS,mmm format.
+  - [x] Scheduled scanning. New Settings > Scheduler tab. Flexible per-folder
+    schedule: every X minutes, every X hours, or every X days at a specific
+    HH:MM wall-clock time. Free-form spinbox + radio button UI replaces the
+    old three-option dropdown. Overdue jobs run immediately on startup.
+    Deferred during active manual scans via set_scan_active() lock.
+    Last-run timestamp saved immediately on job start (crash-safe).
+    Legacy "hourly"/"nightly"/"weekly" configs migrate automatically.
+    Status bar start/finish messages. Persists in settings.json under
+    "schedules" key as interval_type/interval_value/time_of_day.
+
+  - [x] Settings dialog button hover/active states. All inline setStyleSheet
+    calls removed from settings dialog buttons. Buttons now inherit the global
+    app stylesheet QPushButton rules, restoring hover and pressed visual
+    feedback. Save button uses btn_settings_primary object name (blue);
+    "I Understand" warning button uses btn_settings_warn object name (orange).
+    QRadioButton stylesheet added to global app stylesheet (was missing
+    entirely, causing selected state to be nearly invisible).
+
+  - [x] App icon — desktop/Start Menu fix. Installer [Files] section now
+    explicitly installs subforge.ico from repo root into {app}, independent
+    of PyInstaller output. Both Start Menu and desktop shortcuts reference
+    {app}\subforge.ico via IconFilename. PyInstaller spec updated to include
+    subforge.ico in datas so runtime BASE_DIR lookup finds it. CFBundleVersion
+    bumped to 1.0.1. Title bar icon removed (app-level icon only) to avoid
+    showing in the window chrome while keeping taskbar/Start Menu correct.
+
+  - [x] clean() call bug fixed in watcher.py and scheduler.py. Both workers
+    were calling clean(sub, threshold=self._threshold) which doesn't exist —
+    clean() has no threshold parameter. Fixed to manually filter blocks by
+    id() set, matching the pattern used throughout the rest of the app.
+
+  - [x] 14 language packs updated for all new strings.
+
+  - [x] Full testing pass complete. v1.0.1 tagged.
 
 
 v1.1.0 — Find & Replace and Audio Sync

@@ -1,4 +1,4 @@
-# <img src="subforge.png" width="60" height="60"> SubForge — v1.0.0: Accessibility, Themes & Release
+# <img src="subforge.png" width="60" height="60"> SubForge — v1.0.1: Scheduled Scanning & Timing Tools
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -9,6 +9,15 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 ---
 
 ## What's New
+
+### v1.0.1 — Scheduled Scanning & Timing Tools
+- **Shift Timestamps** — new button in the Single File action bar. Offsets every subtitle block by a fixed millisecond value. Always applied relative to the original timestamps — entering 0 restores the file exactly. Last used value persists per file. Live preview reads from originals so it stays accurate after a prior shift. Non-destructive until you save.
+- **Stretch Timing** — companion button for correcting progressive drift caused by a framerate mismatch. Provide two anchor points (current and correct timestamps near the start and end); SubForge linearly rescales everything in between. Live preview included. Non-destructive until you save.
+- **Watch Folders** — new Settings tab. Add any number of folders across any drives. New subtitle files are cleaned automatically in the background. Fully recursive including new subdirectories. File-size stability check handles Windows copy locks. Confirmation dialog with file count and sensitivity level required before cleaning existing files. Errors written to the error log. Badge in the status bar shows active count.
+- **Scheduled Scanning** — new Settings tab. Configure folders to scan on a flexible schedule: every X minutes, every X hours, or every X days at a specific HH:MM time. Free-form number entry — no fixed presets. Overdue jobs run immediately on startup. Scans deferred during manual batch operations. Crash-safe last-run tracking. Legacy "hourly/nightly/weekly" configs migrate automatically.
+- **Settings button hover states** — all Settings dialog buttons now respond to hover and press. `QRadioButton` stylesheet added globally — was missing, causing selected state to be nearly invisible on dark backgrounds.
+- **App icon fix** — `subforge.ico` now explicitly installed into the application directory by the installer and included in PyInstaller `datas`. Both Start Menu and desktop shortcuts reference it via `IconFilename`, fixing display across Windows versions and icon cache states.
+- **14 language packs updated** — all new strings fully translated across all 14 supported languages.
 
 ### v1.0.0 — Accessibility, Themes & Release
 - **Light, High Contrast, and AMOLED Black themes** — three new visual themes alongside the original dark theme. Switch in Settings > General. Takes effect on restart.
@@ -104,7 +113,7 @@ The main window has seven tabs: **Single File**, **Batch**, **Embedded Subs**, *
 
 ## Settings
 
-Click **⚙ Settings** in the toolbar to open the Settings dialog. It has four tabs: **General**, **Cleaning Options**, **Paths**, and **About**. Settings are saved automatically to `settings.json` in SubForge's data directory.
+Click **⚙ Settings** in the toolbar to open the Settings dialog. It has six tabs: **General**, **Cleaning Options**, **Paths**, **Watch Folders**, **Scheduler**, and **About**. Settings are saved automatically to `settings.json` in SubForge's data directory.
 
 ### General
 
@@ -112,6 +121,8 @@ Click **⚙ Settings** in the toolbar to open the Settings dialog. It has four t
 
 - **Default sensitivity** — sets the starting sensitivity level (1–5) applied to all tabs when SubForge launches. Drag the slider toward Aggressive to catch more blocks, or toward Conservative to reduce false positives. This is the same slider available in Single File, Batch, and Embedded Subs — changing it here sets what value those sliders start at on next launch. A scan elapsed timer in the status bar shows how long each Batch or Embedded Subs scan takes.
 - **Language** — changes the interface language. SubForge supports 14 languages: English, Spanish, Dutch, Hebrew, Indonesian, Portuguese, Swedish, French, Arabic, Chinese, Hindi, Russian, Turkish, and Polish. A restart is required to apply the change; SubForge will offer to restart automatically.
+- **Theme** — choose between Dark (default), Light, High Contrast, and AMOLED Black. Takes effect on restart.
+- **Font size** — choose Small, Medium, or Large. Scales all UI text globally, including HTML report panels and drop zones. Takes effect on restart.
 
 ### Cleaning Options
 
@@ -142,12 +153,33 @@ Configure where SubForge looks for external tools. Each entry has a Browse butto
 - **Tesseract** — required for the Image Subs tab
 - **Whisper model directory** — where downloaded Whisper models are cached. Leave blank to use the default location inside SubForge's data folder
 
+### Watch Folders
+
+Add folders for SubForge to monitor continuously while running. Any new subtitle file that appears in a watched folder (including subfolders) is automatically cleaned in the background using the current global cleaning options and default sensitivity. Uses OS-level file system notifications — no polling, no CPU overhead while idle. A green badge in the status bar shows how many folders are active. Watch folder errors appear in both the status bar and the error log.
+
+When you add a folder that already contains subtitle files, a confirmation dialog lists the file count and the current sensitivity level and asks you to confirm before running an immediate recursive clean pass on the existing files.
+
+Watched folders and their configuration persist in `settings.json` and are restored automatically on the next launch. See the **Watch Folders** section below for full workflow details.
+
+### Scheduler
+
+Configure folders to be scanned automatically on a flexible recurring schedule. When adding a schedule, choose from three interval modes:
+
+- **Minutes** — scan every X minutes (e.g. every 30 minutes)
+- **Hours** — scan every X hours (e.g. every 2 hours)
+- **Days** — scan every X days at a specific HH:MM wall-clock time (e.g. every 1 day at 02:00)
+
+Enter any positive number — there are no fixed presets. Each scheduled job runs in the background using the current global cleaning options and default sensitivity. On startup, any overdue jobs run immediately. Scheduled scans are deferred while a manual Batch or Embedded Subs scan is in progress. The status bar shows a message when each scheduled scan starts and when it completes.
+
+Schedule configuration, including the last-run timestamp for each job, persists in `settings.json`. See the **Scheduled Scanning** section below for full workflow details.
+
 ### About
 
-Shows the current version, author, and links to the GitHub repository and issue tracker. Three buttons:
+Shows the current version, author, and links to the GitHub repository and issue tracker. Four buttons:
 
 - **What's New** — opens the release notes dialog showing the full changelog
 - **View Error Log** — opens a scrollable log of any errors SubForge has encountered, with the log file path shown at the top. Each entry includes the originating tab, a UTC timestamp, and the full traceback. A **Clear Log** button resets the file
+- **Open Data Folder** — opens the directory containing `settings.json`, logs, and the Whisper model cache directly in your file manager
 - **Report an Issue** — opens the GitHub issue tracker in your browser
 
 ---
@@ -170,6 +202,128 @@ For loading, inspecting, and cleaning individual subtitle files.
    - **Always Mark as Ad…** — opens the Add Pattern dialog (see below)
 7. Click **Clean & Save** (`Ctrl+S`) to write the cleaned file — a confirmation dialog shows exactly how many blocks will be removed
 8. Use **Prev File** / **Next File** to move through the queue
+
+---
+
+## Shift Timestamps
+
+The **Shift Timestamps…** button in the Single File action bar fixes subtitles that are all off by the same amount — every line arrives too early or too late by a consistent delay.
+
+**When to use it:**
+- You downloaded subtitles for a different release of the same film (theatrical vs. extended cut, different encode, different streaming rip)
+- A re-encode trimmed or added a few seconds of black at the start of the video
+- The subtitles are otherwise correct — the dialogue matches, the pacing is right — but everything is uniformly ahead of or behind the audio
+
+**When *not* to use it:**
+- The subtitles start roughly in sync but drift further and further out over time — that is a framerate mismatch. Use **Stretch Timing…** instead (see below)
+
+**Workflow:**
+1. Load a subtitle file in the Single File tab
+2. Click **Shift Timestamps…**
+3. Enter an offset in milliseconds — positive to shift later, negative to shift earlier (e.g. `2000` for 2 seconds later, `-800` for 800 ms earlier)
+4. The live preview updates instantly, showing the before and after timestamps for your first three blocks so you can verify the offset is correct before committing
+5. Click **OK** — all timestamps in the file are shifted in memory. No file is written yet
+6. Review the result in the block list, then click **Clean & Save** (`Ctrl+S`) to write the file
+
+The shift is non-destructive until you save. If you enter the wrong value, simply click **Shift Timestamps…** again and apply a correcting offset, or close the file without saving and reload it.
+
+---
+
+## Stretch Timing
+
+The **Stretch Timing…** button fixes subtitles that start roughly in sync but drift progressively further out of sync as the video goes on — the classic symptom of a framerate mismatch between the subtitle file and the video it was made for.
+
+**When to use it:**
+- The first few lines are close but the gap grows — by the end of the film the subtitles are several seconds behind or ahead
+- Subtitles were authored at 23.976 fps but the video runs at 25 fps (or any other common mismatch)
+- You converted a video between PAL and NTSC frame rates without re-timing the subtitles
+
+**When *not* to use it:**
+- Every line is off by the same fixed amount — use **Shift Timestamps…** instead (see above)
+
+**How it works:**
+
+You give SubForge two anchor points — a timestamp near the start of the file and one near the end. For each anchor, you provide the timestamp where that subtitle line currently appears and the timestamp where it should actually appear. SubForge calculates a linear scale factor from those two corrections and applies it to every block in the file, proportionally adjusting everything in between.
+
+The dialog pre-fills both anchors with the first and last block timestamps as a starting point. A live preview shows how the first and last blocks will move so you can verify the correction is reasonable before committing.
+
+**Workflow:**
+1. Load a subtitle file in the Single File tab
+2. Find a line near the start that you can match to the audio — note its current timestamp and the correct one
+3. Find a line near the end and do the same
+4. Click **Stretch Timing…**
+5. Fill in the four fields: current and correct timestamps for Anchor 1 (near start) and Anchor 2 (near end). Format is `HH:MM:SS,mmm` — e.g. `00:01:23,450`
+6. The live preview updates as you type, showing the before/after for the first and last blocks
+7. Click **OK** — all timestamps are rescaled in memory. No file is written yet
+8. Review the result in the block list, then click **Clean & Save** (`Ctrl+S`) to write the file
+
+Like Shift, the stretch is non-destructive until you save. If the result looks wrong, close the file without saving and reload it.
+
+---
+
+## Watch Folders
+
+The **Watch Folders** tab in Settings lets you tell SubForge to monitor one or more folders continuously while the app is running. Any new subtitle file that appears in a watched folder is cleaned automatically — no manual intervention needed.
+
+**When to use it:**
+- Your download client saves subtitle files to a known folder — SubForge cleans them the moment they land, before you even open them
+- You have separate folders for movies and TV shows on different drives — add them both, since the watch list supports multiple folders
+- You want a hands-off cleaning pass on anything that comes in overnight
+
+**How it works:**
+
+SubForge uses `QFileSystemWatcher`, which receives OS-level directory change notifications — there is no polling and no performance overhead when folders are idle. When a change is detected, SubForge checks for subtitle files it has not seen before in that directory. New files are cleaned in a background thread using the current global cleaning options and the default sensitivity setting from Settings > General. The UI is never blocked.
+
+The status bar shows a green **● Watching N folder(s)** badge whenever any watch folders are active. When a file is cleaned, the status bar shows the filename and how many ad blocks were removed. Errors are shown in the same location.
+
+Watch folder configuration is saved in `settings.json` and restored automatically on the next launch, so you configure them once and forget about them.
+
+**Workflow:**
+1. Open **⚙ Settings** and go to the **Watch Folders** tab
+2. Click **Add Folder…** and select a folder to monitor — repeat for each folder you want to watch
+3. Click **Save** — SubForge begins watching immediately. The green badge appears in the status bar
+4. To stop watching a folder, open Settings > Watch Folders, select it in the list, and click **Remove**, then Save
+
+**Notes:**
+- Cleaning uses whatever sensitivity and cleaning options are active at the time the file appears — there is no per-folder configuration
+- Watch folders only run while SubForge is open. Files that arrived while SubForge was closed are not retroactively cleaned on the next launch (use the Batch tab for that)
+- The same folder can safely be your Batch target and a watch folder at the same time
+
+---
+
+## Scheduled Scanning
+
+The **Scheduler** tab in Settings lets you configure folders to be scanned automatically on a flexible recurring schedule. Unlike Watch Folders (which only react to new files), scheduled scans clean everything in the folder at each run, including files that were there before.
+
+**When to use it:**
+- You want a regular overnight pass on your subtitle library to catch anything that slipped through
+- Your download client renames or moves files after delivery, so Watch Folders can't reliably catch them
+- You prefer a predictable, time-based approach rather than an event-driven one
+
+**How it works:**
+
+Each scheduled job has a folder and an interval. You choose from three modes: every X minutes, every X hours, or every X days at a specific HH:MM wall-clock time — with any number you want, no fixed presets. SubForge records the last time each job ran in `settings.json`. A timer checks every 60 seconds whether any schedule is overdue. When one is, the scan runs in a background thread — the UI is never blocked. All subtitle files in the folder are scanned recursively, and any with ad blocks above the current default sensitivity threshold are cleaned and written back in place.
+
+**Startup catch-up:** If SubForge was closed when a scheduled scan was due, it runs immediately on the next launch, before the 60-second timer fires.
+
+**Manual scan priority:** Scheduled scans will not start while a Batch or Embedded Subs scan is already running. The scheduler waits for the manual scan to finish before checking again.
+
+**Workflow:**
+1. Open **⚙ Settings** and go to the **Scheduler** tab
+2. Click **Add Schedule…** — a dialog opens with a folder picker and three interval options
+3. Browse for the folder you want to scan
+4. Select your interval mode and enter a number:
+   - **Minutes** — e.g. `30` to scan every 30 minutes
+   - **Hours** — e.g. `2` to scan every 2 hours
+   - **Days at** — e.g. `1` day at `02:00` to scan nightly at 2 AM
+5. Click **OK**, then **Save** — the schedule is active immediately
+6. The status bar shows a brief message when a scheduled scan starts and again when it finishes, including how many files were cleaned
+7. To remove a schedule, select it in the list and click **Remove**, then Save
+
+**Notes:**
+- Cleaning uses the global cleaning options and the default sensitivity from Settings > General at the time the scan runs — there is no per-schedule configuration
+- Each job's last-run timestamp is saved immediately when the scan starts, so a crash during the scan will not cause it to re-run on the next launch
+- Multiple schedules can overlap (e.g. the same folder can be watched and scheduled) — they operate independently
 
 ---
 
@@ -455,9 +609,6 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v1.0.1 — Scheduled Scanning & Timing Tools**
-Scheduled folder scanning with configurable intervals (hourly/nightly/weekly) and auto-clean on new files. Live watch folder monitoring via QFileSystemWatcher. Timestamp shift (offset all blocks by N milliseconds) and timestamp stretch/compress (re-sync drifted subtitles to a new frame rate). Both timing tools live in the Single File tab.
-
 **v1.1.0 — Find & Replace and Audio Sync**
 Global find & replace with regex support and per-match stepping. Full undo/redo stack (Ctrl+Z/Ctrl+Y) in the Single File tab. Automatic audio sync via ffsubsync — one button aligns subtitle timestamps to the audio track of a paired video file. Batch auto-sync applies the same to an entire folder.
 
@@ -474,4 +625,4 @@ The full roadmap with detailed implementation notes is maintained in `ROADMAP.tx
 
 ---
 
-*SubForge v1.0.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v1.0.1 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*

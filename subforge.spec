@@ -8,6 +8,7 @@ added_data = [
     (str(HERE / "regex_profiles" / "default"), "regex_profiles/default"),
     (str(HERE / "CHANGELOG.md"), "."),
     (str(HERE / "subforge.png"), "."),
+    (str(HERE / "subforge.ico"), "."),
 ]
 
 a = Analysis(
@@ -111,8 +112,8 @@ app = BUNDLE(
     name="SubForge.app",
     bundle_identifier="com.babcockdavidr.subforge",
     info_plist={
-        "CFBundleShortVersionString": "0.15.0",
-        "CFBundleVersion":            "0.15.0",
+        "CFBundleShortVersionString": "1.0.1",
+        "CFBundleVersion":            "1.0.1",
         "NSHighResolutionCapable":    True,
         "LSMinimumSystemVersion":     "10.15",
     },
