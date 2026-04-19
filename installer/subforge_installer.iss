@@ -8,12 +8,12 @@
 ;      (or run: iscc subforge_installer.iss from the repo root)
 ;
 ; Output:
-;   Output\SubForge-0.17.0-setup.exe
+;   Output\SubForge-1.0.0-setup.exe
 ;
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "0.17.0"
+#define AppVersion   "1.0.0"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"
@@ -42,6 +42,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 ; appearance
 WizardStyle=modern
+SetupIconFile=..\subforge.ico
+WizardSmallImageFile=..\subforge.png
 SetupMutex=SubForgeSetupMutex
 ; require admin for Program Files install
 PrivilegesRequired=admin
