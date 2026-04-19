@@ -1,5 +1,20 @@
 # SubForge — Release Notes
 
+## v1.0.0 — Accessibility, Themes & Release
+
+- **Light, High Contrast, and AMOLED Black themes** — three new visual themes alongside the original dark theme. The theme selector lives in Settings > General and in the first-run setup wizard. Theme takes effect on restart and is stored in `settings.json`.
+- **Font size setting** — Small (9pt), Medium (11pt), and Large (14pt) options in Settings > General. Scales all UI text globally via `QApplication.setFont` and per-widget stylesheet substitution. HTML report panels in the Batch, Image Subs, and Transcribe tabs scale via dynamic CSS `px` values. Drop zones expand proportionally at larger sizes.
+- **Keep Backup on Convert tab** — the Convert Format tab now has a Keep backup checkbox for both single-file and batch modes, matching the behaviour of every other tab.
+- **Keyboard navigation** — full `setTabOrder()` chains added to every panel and the Settings dialog. Every interactive element is reachable and operable without a mouse. Sliders respond to arrow keys; checkboxes and buttons to Space/Enter.
+- **Screen reader support** — `setAccessibleName()` and `setAccessibleDescription()` added to all sliders, progress bars, list/tree/table widgets, format combos, model/language combos, and icon-only buttons (the ✕ delete buttons in Embedded Subs). Compatible with Windows Narrator.
+- **Theme and font size selectors in setup wizard** — both options are available on first launch before the main window opens, with the same immediate-restart behaviour as the language selector.
+- **Open data folder** — new button in Settings > About that opens the directory holding `settings.json`, logs, and the Whisper model cache in the system file manager. Uses `QDesktopServices.openUrl` — no subprocess, cross-platform.
+- **App icon** — SubForge now ships with `subforge.ico`. The icon appears in the toolbar (24×24), the window title bar, taskbar, and Start Menu shortcut. Bundled with the frozen exe via PyInstaller datas.
+- **Experimental banners removed** — the yellow "under active development" banners on the Transcribe and Image Subs tabs have been removed. Both features have been stable for several releases.
+- **14 language packs updated** — all new strings for this release are fully translated across all 14 supported interface languages.
+
+---
+
 ## v0.17.0 — Subtitle Format Conversion & Expanded Format Support
 
 - **Convert Format tab** — a new dedicated tab for converting subtitle files between formats. Single-file mode: drop a file or click Browse, pick an output format from the dropdown, click Convert. The output is written next to the source file using the same stem and the new extension. Batch mode: point at a folder, choose a target format, and Convert All — SubForge processes every supported subtitle file in the folder and reports how many were converted, skipped, and failed. Both modes run in background threads so the UI stays responsive.

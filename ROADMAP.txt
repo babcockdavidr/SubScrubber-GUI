@@ -1,150 +1,240 @@
 SubForge — Development Roadmap
-Last updated: v0.17.0 (complete) — next: v1.0.0
+Last updated: v1.0.0 (complete) — next: v1.0.1
 ================================================================================
-
-
-v0.17.0 — Subtitle Format Conversion & Expanded Format Support
---------------------------------------------------------------------------------
-  GOAL: Let users convert subtitle files between formats and add support for
-  subtitle formats beyond SRT/ASS/VTT across all tabs. pysubs2 handles the
-  heavy lifting — this is primarily UI and format coverage work.
-
-  KNOWN ISSUES (carried from v0.16.0) — RESOLVED in v0.17.0
-  - [FIXED] Transcribe tab: Timestamp column was too narrow — end time cut off.
-    Column is now wider (280px default) and user-resizable (Interactive mode).
-  - [FIXED] Transcribe tab: timestamp cells were not editable inline. Now
-    editable; bad input is rejected and the original value is restored.
-
-  SUPPORTED FORMATS (finalized after pysubs2 audit)
-  Six text-based formats are supported everywhere in SubForge — Single File,
-  Batch, and the new Convert tab. All handled via pysubs2; no custom parsers.
-
-    SRT   (.srt)        — SubRip. Universal standard. Full fidelity.
-    ASS   (.ass)        — Advanced SubStation Alpha. Rich styling. Full fidelity.
-    SSA   (.ssa)        — SubStation Alpha (older ASS variant). Full fidelity.
-    VTT   (.vtt)        — WebVTT. Web standard. Timing fine; no style round-trip.
-    TTML  (.ttml)       — W3C Timed Text. Basic parser; complex styling is lossy.
-    SAMI  (.sami/.smi)  — Legacy Windows Media Player format. Rudimentary parser;
-                          flag as potentially lossy on input.
-
-  Excluded: MicroDVD (.sub) — frame-based, requires video framerate to convert
-  correctly. No framerate context available in a Convert tab. See MAYBE SOMEDAY.
-
-  LOSSY CONVERSION WARNINGS (surface in UI, never silently degrade)
-  - ASS/SSA → any other format: styling is not preserved. Warn the user.
-  - TTML or SAMI as input: complex styling may not survive the round-trip.
-
-  CONVERT TAB (dedicated tab, fully featured)
-  - Single-file mode: drag-and-drop or Browse for one subtitle file. Input
-    format auto-detected from extension. Output format chosen from a dropdown
-    (all 6 formats). Output written next to source using same stem + new
-    extension. Lossy warnings shown inline when the path is known to be lossy.
-  - Batch mode: point at a folder, choose a target format, convert all
-    supported subtitle files found. Output written next to each source file.
-    Summary on completion: N converted, N skipped, N failed.
-
-  EXPANDED FORMAT SUPPORT IN SINGLE FILE & BATCH
-  - Single File tab file picker and drop target must accept all 6 formats.
-    Detection, cleaning, and Save As must all work for the new formats.
-  - Batch tab folder scan must pick up all 6 extensions. Format-specific
-    parse failures flagged per-file, not silently skipped.
-
-  - Add new strings to all 14 language packs.
-
 
 v1.0.0 — Accessibility, Themes & Release
 --------------------------------------------------------------------------------
   GOAL: Full accessibility pass, visual theme support, and the final polish
-  that makes SubForge worthy of a 1.0 label. No new major features after this
-  point — only bug fixes, stability, and the release candidate period.
+  that makes SubForge worthy of a 1.0 label.
 
-  - Light theme and high-contrast theme toggle in Settings > General.
-    Dark theme is the existing default. The toggle must reapply immediately
-    without restart (same pattern as sensitivity slider). Store selection in
-    settings.json.
+  - [x] Add "Keep Backup" option to Convert tab for consistency across tabs.
 
-  - Font size setting in Settings > General: Small / Medium / Large.
-    Scales the UI text globally via QApplication.setFont or a stylesheet
-    substitution. Must not break fixed-size widgets or icons.
+  - [x] Light theme, High Contrast theme, and AMOLED Black theme added alongside
+    the original Dark theme. Theme selector in Settings > General and in the
+    first-run setup wizard. Takes effect on restart. Stored in settings.json.
 
-  - Keyboard navigation audit. Every interactive element reachable and
-    operable without a mouse. Tab order must be logical within each tab.
-    All buttons, sliders, and dropdowns must respond to keyboard input
-    correctly.
+  - [x] Font size setting in Settings > General: Small (9pt) / Medium (11pt) /
+    Large (14pt). Scales all UI text globally via QApplication.setFont and
+    per-widget stylesheet substitution. HTML report panels (Batch, Image Subs,
+    Transcribe) also scale via dynamic CSS px values. Drop zones expand to fit.
 
-  - Screen reader compatibility. Call setAccessibleName() and
-    setAccessibleDescription() on all major widgets. Test with Windows
-    Narrator at a minimum. Provide meaningful labels for icon-only buttons
-    and progress indicators.
+  - [x] Keyboard navigation audit. setTabOrder() chains added to every panel
+    and the Settings dialog. Every interactive element reachable and operable
+    without a mouse. Sliders respond to arrow keys; checkboxes to Space;
+    buttons to Enter/Space.
 
-  - Final branding pass. Every user-facing string, label, button text,
-    and tooltip reviewed for consistency and clarity. Icon creation and added to the installer.
+  - [x] Screen reader compatibility. setAccessibleName() and
+    setAccessibleDescription() added to all sliders, progress bars, list/tree/
+    table widgets, format combos, model/language combos, and icon-only buttons
+    (the ✕ delete buttons in Embedded Subs). Windows Narrator tested.
 
-  - Translated READMEs. Generate README.es.md, README.fr.md, etc. (one per
-    language pack) in a docs/ folder, linked from the top of the main README.
-    AI-generated translations are fine. These are maintenance-light once
-    written — only update when major features ship.
+  - [x] Final branding pass. Installer version bumped to 1.0.0. README and
+    CHANGELOG updated. App icon (subforge.ico) added to installer and PyInstaller
+    spec. Icon displayed in the toolbar and window title bar. subforge.png
+    bundled with the frozen exe via PyInstaller datas.
 
-  - "Open data folder" button in Settings > About (or General). Opens the
-    directory that holds settings.json, Whisper model cache, and logs in the
-    system file manager. Platform logic:
+  - [x] Experimental banners removed from Transcribe and Image Subs tabs.
+    Both features have been stable for several releases.
+
+  - [x] "Open data folder" button in Settings > About. Opens the directory that
+    holds settings.json, Whisper model cache, and logs in the system file
+    manager. Uses QDesktopServices.openUrl — cross-platform, no subprocess.
       Windows frozen (.exe): %APPDATA%\SubForge
       Windows/any from source: repo root (where settings.json lives)
-      macOS: placeholder — ~/Library/Application Support/SubForge (TBD when
-             macOS packaging is tackled post-1.0)
-      Linux: placeholder — ~/.local/share/SubForge (TBD with Linux binary work)
-    Use QDesktopServices.openUrl(QUrl.fromLocalFile(path)) — cross-platform,
-    no subprocess needed. The frozen/source distinction is already handled by
-    the paths module; just expose it as a button.
+      macOS: ~/Library/Application Support/SubForge (placeholder — TBD)
+      Linux: ~/.local/share/SubForge (placeholder — TBD)
 
-  - Scheduled scanning. Let users configure a folder watch on a schedule
-    (e.g. nightly, hourly). New subtitle files that appear since the last run
-    are automatically cleaned using the cleaning settings the user chose at
-    scheduling time. Results logged; user notified of what was changed.
+  - [x] Release candidate period complete. Clean-machine install tested.
+    v1.0.0 tagged.
 
-  - Release candidate period. Tag an RC build, run a clean-machine install
-    test, and give at least a few days for issue reports before tagging 1.0.0.
+
+v1.0.1 — Scheduled Scanning & Timing Tools
+--------------------------------------------------------------------------------
+  GOAL: Background automation and the first timing manipulation tools.
+
+  - Scheduled scanning. New Settings tab or dialog (Scheduler) where the user
+    configures a folder, a schedule (hourly/nightly/weekly), and which cleaning
+    options to apply. SubForge checks the schedule on startup and runs any
+    overdue jobs in the background. Results are written to a scan log and a
+    system tray notification (or status bar message on next launch) reports
+    what was changed. The scheduler must not run during an active manual scan.
+    Store schedule config in settings.json under a "schedules" key.
+
+  - Watch folder (live). A secondary option alongside scheduled scanning: a
+    folder that SubForge monitors continuously while running. Any new subtitle
+    file that appears is automatically cleaned using the current global cleaning
+    settings. Useful for download folders. Uses QFileSystemWatcher — no polling.
+    Show a status bar badge when watch folder is active.
+
+  - Timestamp shift. A new tool accessible from the Single File tab action bar:
+    "Shift Timestamps…" opens a small dialog with a millisecond offset input
+    (positive or negative). Applies the offset to every block in the loaded
+    file. Preview shows the before/after timing of the first few blocks.
+    Uses the existing subtitle model — no new file format logic needed.
+
+  - Timestamp stretch/compress. Companion to shift: a "Stretch Timing…" dialog
+    that takes a start point and an end point (in ms) and linearly scales all
+    timestamps to fit. Corrects subtitle drift when a video has been re-encoded
+    at a different frame rate. Input fields accept HH:MM:SS,mmm format.
+
+
+v1.1.0 — Find & Replace and Audio Sync
+--------------------------------------------------------------------------------
+  GOAL: The two biggest workflow quality-of-life features that no other
+  all-in-one subtitle tool handles well.
+
+  - Global find & replace. A toolbar button (or Ctrl+H shortcut) opens a
+    find/replace dialog that operates on the currently loaded subtitle file
+    in the Single File tab. Supports plain text and regex. "Replace All" with
+    a confirmation count. "Replace & Next" for stepping through matches.
+    Matched text is highlighted in the block list. Changes are tracked in the
+    existing undo/redo history (see below).
+
+  - Undo/redo in Single File tab. Every block state change (Mark as Ad, Keep
+    Block, Always Mark as Ad, find/replace edits, timing edits) is pushed onto
+    a QUndoStack. Ctrl+Z / Ctrl+Y. The undo stack is cleared when a new file
+    is loaded. Status bar shows "Undone: X" after each undo.
+
+  - Audio sync via ffsubsync. A "Sync to Audio…" button in the Single File
+    tab and the Embedded Subs detail pane. Runs ffsubsync (pip install
+    ffsubsync) against the paired video file to automatically align subtitle
+    timestamps with the audio track. The video path is auto-detected from the
+    subtitle filename if a matching video file sits next to it; otherwise a
+    file picker appears. Runs in a background thread; shows progress in the
+    status bar. ffsubsync is an optional dependency — the button is hidden
+    (not just disabled) when it is not installed, with a tooltip explaining
+    how to install it.
+
+  - Batch audio sync. An "Auto-Sync All" option in the Batch tab action row,
+    alongside Scan All and Clean & Save All. Runs ffsubsync on every file in
+    the batch against a paired video file (same directory, same stem). Files
+    without a matching video are skipped and reported.
+
+
+v1.2.0 — Burn-in, Split/Merge & Style Editor
+--------------------------------------------------------------------------------
+  GOAL: Output and editing features that complete SubForge's role as a
+  full-lifecycle subtitle tool.
+
+  - Burn-in subtitles. A "Burn In…" button in the Single File and Embedded Subs
+    tabs. Uses ffmpeg's subtitles filter to render the subtitle track permanently
+    into the video stream. Output is written next to the source video with a
+    .burned suffix. Supports .srt and .ass inputs; .ass preserves styling.
+    This is irreversible — warn clearly and require confirmation.
+
+  - Split subtitle file. "Split at timestamp…" in the Single File tab action
+    bar. The user picks a timestamp (or selects a block as the split point).
+    SubForge writes two files: original_stem.part1.srt and .part2.srt. Block
+    indices are renumbered from 1 in each part.
+
+  - Merge subtitle files. "Merge with…" in the Single File tab. Opens a file
+    picker for a second subtitle file. SubForge concatenates the two, re-indexes
+    all blocks, and writes a merged output file. Warns if there are overlapping
+    timestamps.
+
+  - ASS/SSA style editor. When an .ass or .ssa file is loaded in the Single
+    File tab, a "Styles…" button appears in the action bar. Opens a dialog
+    listing all style definitions in the [V4+ Styles] section. Each style is
+    editable: font name, size, colour (with colour picker), bold/italic/
+    underline, alignment, and margins. Changes are written back to the file
+    on Save. No visual preview — that would require a renderer.
+
+
+v1.3.0 — Community Profiles & Platform Binaries
+--------------------------------------------------------------------------------
+  GOAL: Community-driven detection improvement and broader platform reach.
+
+  - Community regex profile sync. An opt-in "Update Profiles" button in the
+    Regex Editor tab. Fetches the latest profiles from a designated branch of
+    the SubForge GitHub repo (raw content API — no auth needed). Compares
+    checksums against locally installed profiles. New profiles are added;
+    existing user-edited profiles are never overwritten without explicit
+    confirmation. A "last updated" timestamp is shown in the Regex Editor.
+
+  - False positive allowlist. A "Not an ad" button in the Single File block
+    detail pane (alongside Mark as Ad / Keep Block). Adds the block's cleaned
+    text to a local allowlist file. Any block whose text matches an allowlist
+    entry is permanently exempted from detection across all files. The allowlist
+    is editable in a new Allowlist tab (or a section of the Regex Editor tab).
+
+  - Linux binary. Build and test a Linux AppImage using the existing GitHub
+    Actions workflow (the job is already written — just needs enabling and a
+    test pass on Ubuntu). Test on Ubuntu LTS and Fedora. The settings path on
+    Linux is ~/.local/share/SubForge — already handled as a placeholder in
+    core/paths.py.
+
+  - macOS binary. Requires physical Apple hardware for code signing. Blocked
+    until hardware is available. The GitHub Actions macOS job is already written.
+    Settings path on macOS is ~/Library/Application Support/SubForge — also
+    already a placeholder in core/paths.py. Document the manual signing steps
+    in a BUILD.md file when this becomes actionable.
+
+
+v1.4.0 — Media Server Integration & ML Detection
+--------------------------------------------------------------------------------
+  GOAL: Power-user automation and next-generation detection.
+
+  - Plex library integration. A new "Library" tab (or dialog) where the user
+    enters a Plex Media Server URL and token. SubForge reads the library
+    structure via the Plex API, lets the user browse servers/libraries/shows,
+    and queues subtitle files for scanning without manually navigating the
+    filesystem. After cleaning, triggers a Plex metadata refresh via the API.
+    The Plex token is stored in settings.json (not in plain text — use simple
+    XOR obfuscation at minimum).
+
+  - Jellyfin / Emby integration. Same pattern as Plex but using the Jellyfin
+    API (which Emby is compatible with). Auth uses an API key rather than a
+    token. The library browser is the same UI component reused.
+
+  - ML detection layer. A local classifier (scikit-learn, small model, ships
+    bundled) trained on labeled ad/clean subtitle blocks. Runs alongside the
+    regex engine as a second scoring signal. ML score adds up to +2 points to
+    the block's total — it cannot override a regex match, only reinforce it.
+    The model is retrained periodically and distributed as a binary blob via
+    the community profile sync mechanism. Users can opt out in Settings >
+    Cleaning Options.
+
+  - Auto-update. Download the latest release installer/binary directly in-app
+    rather than opening the browser. Shows a changelog summary before
+    downloading. Verifies the download with a SHA-256 checksum published
+    alongside each GitHub release. On Windows, downloads the new .exe, launches
+    it with /SILENT, and exits. Requires careful design — do not implement
+    without checksum verification.
 
 
 ================================================================================
-POST-1.0 — FUTURE FEATURES
+POST-1.4 — FUTURE IDEAS
 ================================================================================
-
-  MACOS AND LINUX BINARIES
-  - Source code is cross-platform Python, but binaries require per-platform
-    packaging and testing.
-  - macOS requires physical Apple hardware for code signing and testing.
-    Not currently feasible — no Apple devices available.
-  - Linux can be tested in a VM. Candidate for an early post-1.0 minor release.
-  - GitHub Actions already has macOS/Linux jobs written — just needs enabling
-    and a test pass when the time comes.
-  - Any platform-specific code must be additive (wrapped in platform checks),
-    never replacing the Windows-specific frozen .exe path.
-
-  AUTO-UPDATE
-  - Download and apply updates in-app rather than opening the browser.
-  - Security implications (signature verification, rollback) need careful
-    design before implementation.
 
   PLUGIN SYSTEM
-  - User-written detection logic in Python, for edge cases the regex engine
-    cannot handle.
+  - User-written detection logic in Python, loaded from a plugins/ folder.
+  - Each plugin is a .py file exposing a score(block) -> int function.
   - Sandboxing and a defined API surface need design work before coding.
+  - Plugins are opt-in and disabled by default.
 
+  VIDEO PREVIEW
+  - Play the video alongside the subtitle review in Single File tab.
+  - Clicking a block in the block list seeks the video to that timestamp.
+  - Requires embedding a media player widget (Qt Multimedia or VLC bindings).
+  - Large scope — design as a separate optional panel, off by default.
 
-================================================================================
-MAYBE SOMEDAY
-================================================================================
+  DUPLICATE SUBTITLE DETECTOR
+  - Scan a folder for subtitle files with identical or near-identical content
+    (fuzzy match on cleaned text, ignoring timestamps).
+  - Useful for identifying duplicate tracks embedded in video files.
+  - Output a report; let the user choose which duplicates to delete.
 
-  (Nothing here yet — MicroDVD (.sub) support was promoted out of this section
-  and shipped in v0.17.0 using pysubs2's auto-detect framerate approach, with
-  an inline advisory shown whenever .sub is involved in a conversion.)
+  SPELL CHECK INTEGRATION
+  - Optional spell-check pass after cleaning, highlighting misspelled words
+    in the Single File block list.
+  - Use pyenchant or languagetool-python as the backend.
+  - Must be language-aware — use the detected subtitle language.
 
 
 ================================================================================
 DECISIONS & STANDING RULES
 ================================================================================
-  - Version format: v0.x.0 through 1.0.0, then semantic (1.0.1, 1.1.0, etc.)
+  - Version format: semantic after 1.0.0 (1.0.1, 1.1.0, 1.4.0, 2.0.0, etc.)
   - Extract & Save filename format: [video stem].[lang].[ext]
     e.g. Movie.eng.srt — SDH tracks: Movie.eng.sdh.srt
   - SubForge is an accessibility tool. SDH removal and any feature that
@@ -161,8 +251,12 @@ DECISIONS & STANDING RULES
   - Check for Updates stays in the status bar permanently.
   - Settings is a toolbar dialog, not a tab.
   - No emojis on buttons except ⚙ on the Settings button.
-  - os.execv fails in frozen (PyInstaller) apps — use QProcess.startDetached
-    or relaunch via subprocess for anything that requires a restart.
+  - os.execv fails in frozen (PyInstaller) apps — use subprocess.Popen +
+    app.quit() for anything that requires a restart.
   - Settings must write to AppData (installer) or the repo root (source),
     never to Program Files.
   - Subprocess console windows must be suppressed (creationflags on Windows).
+  - When marshalling results from a background thread to the main thread,
+    always use pyqtSignal — never QTimer.singleShot from a plain thread.
+  - HTML report panels use dynamic CSS px values keyed to get_font_pt() so
+    font size changes are reflected in QTextBrowser content.

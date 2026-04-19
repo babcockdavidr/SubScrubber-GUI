@@ -7,6 +7,7 @@ HERE = Path(SPECPATH)
 added_data = [
     (str(HERE / "regex_profiles" / "default"), "regex_profiles/default"),
     (str(HERE / "CHANGELOG.md"), "."),
+    (str(HERE / "subforge.png"), "."),
 ]
 
 a = Analysis(
@@ -92,6 +93,7 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
+    icon="subforge.ico",
 )
 
 coll = COLLECT(

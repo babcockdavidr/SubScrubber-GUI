@@ -1,4 +1,4 @@
-# SubForge — v0.17.0: Subtitle Format Conversion & Expanded Format Support
+# SubForge — v1.0.0: Accessibility, Themes & Release
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
@@ -10,13 +10,17 @@ SubForge's ad-detection engine is built on a regex-based scoring system, incorpo
 
 ## What's New
 
-### v0.17.0 — Subtitle Format Conversion & Expanded Format Support
-- **Convert Format tab** — a new dedicated tab for converting subtitle files between formats. Single-file mode lets you drop a file, pick an output format, and convert in one click. Batch mode converts every supported subtitle file in a folder at once, with a summary of how many were converted, skipped, and failed.
-- **Lossy conversion warnings** — when a conversion is known to degrade the output (ASS/SSA styling, TTML/SAMI parser limits, MicroDVD framerate), SubForge shows an orange warning inline before you proceed. Warnings appear automatically — they never block the conversion.
-- **Seven supported formats everywhere** — SubForge now reads and writes SRT, ASS, SSA, WebVTT, TTML, SAMI, and MicroDVD across Single File, Batch, and the new Convert Format tab. File pickers, drop zones, and folder scanners all accept `.srt`, `.ass`, `.ssa`, `.vtt`, `.ttml`, `.sami`, `.smi`, and `.sub`.
-- **MicroDVD (.sub) support** — frame-based format supported via pysubs2's auto-detect framerate. An advisory is shown whenever `.sub` is involved so you know to verify timing if the source framerate is non-standard.
-- **Transcribe tab: timestamp column fixed** — the Timestamp column is now wider (280px default) and fully user-resizable.
-- **Transcribe tab: inline timestamp editing** — timestamp cells are now editable. Double-click to correct timing; invalid input is rejected and the original value is restored automatically.
+### v1.0.0 — Accessibility, Themes & Release
+- **Light, High Contrast, and AMOLED Black themes** — three new visual themes alongside the original dark theme. Switch in Settings > General. Takes effect on restart.
+- **Font size setting** — choose Small, Medium, or Large in Settings > General. Scales all UI text globally including HTML report panels and drop zones.
+- **Keep Backup on Convert tab** — the Convert Format tab now has a Keep backup checkbox for both single-file and batch conversions, matching the behaviour of every other tab.
+- **Keyboard navigation** — full Tab/Shift+Tab ordering across all tabs. Every interactive element is reachable and operable without a mouse. Sliders respond to arrow keys; checkboxes and buttons to Space/Enter.
+- **Screen reader support** — `setAccessibleName()` and `setAccessibleDescription()` added to all major widgets including sliders, progress bars, list and tree views, icon-only buttons, and all combo boxes. Windows Narrator compatible.
+- **Theme and font size selectors in setup wizard** — choose your preferred theme and font size on first launch, before the main window opens.
+- **Open data folder** — new button in Settings > About that opens the directory holding `settings.json`, logs, and the Whisper model cache directly in your file manager.
+- **App icon** — SubForge now has a proper `.ico` file. The icon appears in the toolbar, the window title bar, the taskbar, and the Start Menu shortcut.
+- **Experimental banners removed** — the yellow "under active development" banners on the Transcribe and Image Subs tabs are gone. Both features have been stable for several releases.
+- **14 language packs updated** — all new strings for this release are fully translated across all 14 supported interface languages.
 
 ---
 
@@ -428,11 +432,23 @@ Changes take effect immediately when saved through the Regex Editor tab. If edit
 
 SubForge is under active development. Here is what is coming next.
 
-**v1.0.0 — Accessibility, Themes & Release**
-Light and high-contrast themes. Font size options. Keyboard navigation and screen reader compatibility. Scheduled folder scanning with auto-clean. Translated READMEs. Release candidate period before final tag.
+**v1.0.1 — Scheduled Scanning & Timing Tools**
+Scheduled folder scanning with configurable intervals (hourly/nightly/weekly) and auto-clean on new files. Live watch folder monitoring via QFileSystemWatcher. Timestamp shift (offset all blocks by N milliseconds) and timestamp stretch/compress (re-sync drifted subtitles to a new frame rate). Both timing tools live in the Single File tab.
 
-The full roadmap is maintained in `ROADMAP.txt` in the repository.
+**v1.1.0 — Find & Replace and Audio Sync**
+Global find & replace with regex support and per-match stepping. Full undo/redo stack (Ctrl+Z/Ctrl+Y) in the Single File tab. Automatic audio sync via ffsubsync — one button aligns subtitle timestamps to the audio track of a paired video file. Batch auto-sync applies the same to an entire folder.
+
+**v1.2.0 — Burn-in, Split/Merge & Style Editor**
+Burn subtitles permanently into a video stream via ffmpeg. Split a subtitle file at any timestamp into two parts. Merge two subtitle files end-to-end. ASS/SSA style editor: visual interface for editing fonts, colours, alignment, and margins in Advanced SubStation Alpha files.
+
+**v1.3.0 — Community Profiles & Platform Binaries**
+Opt-in community regex profile sync — fetch the latest detection profiles from GitHub without leaving the app. False positive allowlist — mark any block as "not an ad" to permanently exempt its text across all future scans. Linux AppImage binary. macOS binary (pending hardware access for code signing).
+
+**v1.4.0 — Media Server Integration & ML Detection**
+Plex and Jellyfin/Emby library integration — browse your media server, queue subtitle files for scanning, and trigger library refreshes after cleaning, all without navigating the filesystem. ML detection layer — a local classifier that runs alongside the regex engine as a secondary scoring signal. In-app auto-update with SHA-256 checksum verification.
+
+The full roadmap with detailed implementation notes is maintained in `ROADMAP.txt` in the repository.
 
 ---
 
-*SubForge v0.17.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
+*SubForge v1.0.0 — based on the detection engine from [subcleaner](https://github.com/KBlixt/subcleaner) by KBlixt (MIT licence)*
