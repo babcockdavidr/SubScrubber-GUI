@@ -8,12 +8,12 @@
 ;      (or run: iscc subforge_installer.iss from the repo root)
 ;
 ; Output:
-;   Output\SubForge-1.0.0-setup.exe
+;   Output\SubForge-1.0.1-setup.exe
 ;
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "1.0.0"
+#define AppVersion   "1.0.1"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"
@@ -43,7 +43,7 @@ MinVersion=10.0
 ; appearance
 WizardStyle=modern
 SetupIconFile=..\subforge.ico
-WizardSmallImageFile=..\subforge.png
+WizardSmallImageFile=..\subforge-white-small.png
 SetupMutex=SubForgeSetupMutex
 ; require admin for Program Files install
 PrivilegesRequired=admin
@@ -70,13 +70,15 @@ Name: "fileassoc_sub";   Description: "Associate .sub subtitle files with SubFor
 [Files]
 ; Bundle the entire PyInstaller output folder
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Explicitly install the app icon so shortcuts can reference it directly
+Source: "..\subforge.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu shortcut
-Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}";              Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\subforge.ico"
 Name: "{group}\Uninstall {#AppName}";   Filename: "{uninstallexe}"
 ; Desktop shortcut (only if task selected)
-Name: "{autodesktop}\{#AppName}";       Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}";       Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\subforge.ico"; Tasks: desktopicon
 
 [Registry]
 ; ── .srt ──────────────────────────────────────────────────────────────────────
