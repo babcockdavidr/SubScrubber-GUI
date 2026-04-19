@@ -165,8 +165,9 @@ def save_cleaning_options(opts: CleaningOptions) -> None:
 # ---------------------------------------------------------------------------
 
 class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, watcher_mgr=None):
         super().__init__(parent)
+        self._watcher_mgr = watcher_mgr
         self.setWindowTitle(STRINGS["settings_title"])
         self.setMinimumWidth(740)
         self.setMinimumHeight(520)
@@ -187,6 +188,8 @@ class SettingsDialog(QDialog):
         self._build_general_tab()
         self._build_cleaning_tab()
         self._build_paths_tab()
+        self._build_watch_tab()
+        self._build_scheduler_tab()
         self._build_about_tab()
 
         # Dialog buttons — manual buttons so text is translatable
@@ -194,17 +197,10 @@ class SettingsDialog(QDialog):
         btn_bar.setContentsMargins(12, 0, 12, 0)
         btn_bar.addStretch()
         self._btn_cancel = QPushButton(STRINGS["settings_btn_cancel"])
-        self._btn_cancel.setStyleSheet(
-            f"padding: 6px 18px; font-size: {get_font_pt()}pt; color: {FG2}; "
-            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
-        )
         self._btn_cancel.setToolTip(STRINGS["tip_settings_cancel"])
         self._btn_cancel.clicked.connect(self.reject)
         self._btn_save = QPushButton(STRINGS["settings_btn_save"])
-        self._btn_save.setStyleSheet(
-            f"padding: 6px 18px; font-size: {get_font_pt()}pt; color: {BG}; "
-            f"border: none; border-radius: 3px; background: {ACCENT};"
-        )
+        self._btn_save.setObjectName("btn_settings_primary")
         self._btn_save.setToolTip(STRINGS["tip_settings_save"])
         self._btn_save.clicked.connect(self._save)
         btn_bar.addWidget(self._btn_cancel)
@@ -587,34 +583,18 @@ class SettingsDialog(QDialog):
 
         # Report an Issue button
         btn_issue = QPushButton(STRINGS["settings_btn_report_issue"])
-        btn_issue.setStyleSheet(
-            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
-            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
-        )
         btn_issue.setToolTip(STRINGS["tip_settings_report_issue"])
         btn_issue.clicked.connect(lambda: webbrowser.open(
             "https://github.com/babcockdavidr/SubForge/issues/new"
         ))
         btn_whats_new = QPushButton(STRINGS["settings_btn_whats_new"])
-        btn_whats_new.setStyleSheet(
-            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
-            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
-        )
         btn_whats_new.setToolTip(STRINGS["tip_settings_whats_new"])
         btn_whats_new.clicked.connect(self._show_changelog)
         btn_log = QPushButton(STRINGS["settings_btn_view_log"])
-        btn_log.setStyleSheet(
-            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
-            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
-        )
         btn_log.setToolTip(STRINGS["tip_settings_view_log"])
         btn_log.clicked.connect(self._show_error_log)
 
         btn_data = QPushButton(STRINGS["settings_btn_open_data_folder"])
-        btn_data.setStyleSheet(
-            f"font-size: {get_font_pt()}pt; padding: 6px 16px; color: {FG2}; "
-            f"border: 1px solid {BORDER}; border-radius: 3px; background: {BG2};"
-        )
         btn_data.setToolTip(STRINGS["tip_settings_open_data_folder"])
         btn_data.clicked.connect(self._open_data_folder)
 
@@ -627,6 +607,380 @@ class SettingsDialog(QDialog):
         outer.addLayout(btn_row)
 
         self._tabs.addTab(tab, STRINGS["settings_tab_about"])
+
+    # ── Watch Folders tab ────────────────────────────────────────────────
+
+    def _build_watch_tab(self):
+        from core.watcher import load_watch_folders
+        from PyQt6.QtWidgets import QListWidget, QListWidgetItem
+
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        intro = QLabel(STRINGS["settings_watch_intro"])
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
+        outer.addWidget(intro)
+
+        # Folder list
+        self._watch_list = QListWidget()
+        self._watch_list.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; font-size: {get_font_pt()}pt;"
+        )
+        self._watch_list.setSelectionMode(
+            self._watch_list.SelectionMode.SingleSelection
+        )
+        outer.addWidget(self._watch_list, stretch=1)
+
+        # Empty-state label (shown when list is empty)
+        self._watch_empty_lbl = QLabel(STRINGS["settings_watch_empty"])
+        self._watch_empty_lbl.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
+        self._watch_empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self._watch_empty_lbl)
+
+        # Populate from saved settings
+        saved = load_watch_folders()
+        for folder in saved:
+            self._watch_list.addItem(folder)
+        self._watch_empty_lbl.setVisible(self._watch_list.count() == 0)
+        self._watch_list.setVisible(self._watch_list.count() > 0)
+
+        # Button row
+        btn_row = QHBoxLayout()
+        btn_add = QPushButton(STRINGS["settings_watch_btn_add"])
+        btn_add.setToolTip(STRINGS["tip_settings_watch_add"])
+        btn_remove = QPushButton(STRINGS["settings_watch_btn_remove"])
+        btn_remove.setToolTip(STRINGS["tip_settings_watch_remove"])
+        btn_row.addWidget(btn_add)
+        btn_row.addWidget(btn_remove)
+        btn_row.addStretch()
+        outer.addLayout(btn_row)
+
+        def _add_folder():
+            from PyQt6.QtWidgets import QFileDialog, QDialog, QVBoxLayout, QLabel, QHBoxLayout, QPushButton
+            path = QFileDialog.getExistingDirectory(self, STRINGS["settings_watch_btn_add"])
+            if not path:
+                return
+            # Deduplicate
+            existing = [self._watch_list.item(i).text()
+                        for i in range(self._watch_list.count())]
+            if path in existing:
+                return
+
+            # Check if the folder already contains subtitle files
+            from core.subtitle import SUPPORTED_EXTENSIONS as _EXTS
+            existing_files = [p for p in Path(path).rglob("*")
+                              if p.suffix.lower() in _EXTS]
+
+            if existing_files:
+                # Show warning dialog
+                from gui.settings_dialog import load_default_sensitivity
+                sensitivity = load_default_sensitivity()
+                sensitivity_labels = {1: "Very Aggressive", 2: "Aggressive",
+                                      3: "Balanced", 4: "Conservative",
+                                      5: "Very Conservative"}
+                sens_label = sensitivity_labels.get(sensitivity, str(sensitivity))
+
+                warn_dlg = QDialog(self)
+                warn_dlg.setWindowTitle(STRINGS["settings_watch_warn_title"])
+                warn_dlg.setMinimumWidth(480)
+                warn_layout = QVBoxLayout(warn_dlg)
+                warn_layout.setContentsMargins(20, 20, 20, 20)
+                warn_layout.setSpacing(12)
+
+                lbl = QLabel(STRINGS["settings_watch_warn_msg"].format(
+                    folder=path, sensitivity=sens_label
+                ))
+                lbl.setWordWrap(True)
+                lbl.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
+                warn_layout.addWidget(lbl)
+
+                file_count_lbl = QLabel(
+                    f"{len(existing_files)} subtitle file(s) found in this folder."
+                )
+                file_count_lbl.setStyleSheet(f"color: {ORANGE}; font-size: {get_font_pt()}pt;")
+                warn_layout.addWidget(file_count_lbl)
+
+                btn_row = QHBoxLayout()
+                btn_row.addStretch()
+                btn_cancel_warn = QPushButton("Cancel")
+                btn_confirm = QPushButton(STRINGS["settings_watch_warn_confirm"])
+                btn_confirm.setObjectName("btn_settings_warn")
+                btn_confirm.setDefault(True)
+                btn_row.addWidget(btn_cancel_warn)
+                btn_row.addWidget(btn_confirm)
+                warn_layout.addLayout(btn_row)
+
+                btn_cancel_warn.clicked.connect(warn_dlg.reject)
+                btn_confirm.clicked.connect(warn_dlg.accept)
+
+                if warn_dlg.exec() != QDialog.DialogCode.Accepted:
+                    return
+
+                # User confirmed — add folder and immediately clean existing files
+                self._watch_list.addItem(path)
+                self._watch_list.setVisible(True)
+                self._watch_empty_lbl.setVisible(False)
+
+                # Trigger immediate recursive clean of existing files if
+                # watcher_mgr is available (it is when opened from the main app)
+                if self._watcher_mgr is not None:
+                    self._watcher_mgr.clean_existing_recursive(path)
+            else:
+                # No existing files — just add silently
+                self._watch_list.addItem(path)
+                self._watch_list.setVisible(True)
+                self._watch_empty_lbl.setVisible(False)
+
+        def _remove_folder():
+            row = self._watch_list.currentRow()
+            if row < 0:
+                return
+            self._watch_list.takeItem(row)
+            if self._watch_list.count() == 0:
+                self._watch_list.setVisible(False)
+                self._watch_empty_lbl.setVisible(True)
+
+        btn_add.clicked.connect(_add_folder)
+        btn_remove.clicked.connect(_remove_folder)
+
+        self._tabs.addTab(tab, STRINGS["settings_tab_watch"])
+
+    # ── Scheduler tab ─────────────────────────────────────────────────────
+
+    def _build_scheduler_tab(self):
+        from core.scheduler import load_schedules
+        from PyQt6.QtWidgets import (QListWidget, QListWidgetItem, QRadioButton,
+                                      QButtonGroup, QDialog, QFormLayout,
+                                      QDialogButtonBox, QFileDialog, QSpinBox)
+        from PyQt6.QtCore import Qt as _Qt
+
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(10)
+
+        intro = QLabel(STRINGS["settings_sched_intro"])
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
+        outer.addWidget(intro)
+
+        # Schedule list
+        self._sched_list = QListWidget()
+        self._sched_list.setStyleSheet(
+            f"background: {BG2}; color: {FG}; border: 1px solid {BORDER}; "
+            f"border-radius: 3px; font-size: {get_font_pt()}pt;"
+        )
+        self._sched_list.setSelectionMode(
+            self._sched_list.SelectionMode.SingleSelection
+        )
+        outer.addWidget(self._sched_list, stretch=1)
+
+        self._sched_empty_lbl = QLabel(STRINGS["settings_sched_empty"])
+        self._sched_empty_lbl.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt()}pt;")
+        self._sched_empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(self._sched_empty_lbl)
+
+        # Populate from saved schedules
+        saved = load_schedules()
+        for sc in saved:
+            last = sc.last_run[:16].replace("T", " ") if sc.last_run else STRINGS["settings_sched_never"]
+            item_text = (f"{sc.folder}    [{sc.display_label()}]    "
+                         f"{STRINGS['settings_sched_lbl_last_run']} {last}")
+            item = QListWidgetItem(item_text)
+            item.setData(_Qt.ItemDataRole.UserRole, sc)
+            self._sched_list.addItem(item)
+
+        self._sched_empty_lbl.setVisible(self._sched_list.count() == 0)
+        self._sched_list.setVisible(self._sched_list.count() > 0)
+
+        # Button row
+        btn_row = QHBoxLayout()
+        btn_add = QPushButton(STRINGS["settings_sched_btn_add"])
+        btn_add.setToolTip(STRINGS["tip_settings_sched_add"])
+        btn_remove = QPushButton(STRINGS["settings_sched_btn_remove"])
+        btn_remove.setToolTip(STRINGS["tip_settings_sched_remove"])
+        btn_row.addWidget(btn_add)
+        btn_row.addWidget(btn_remove)
+        btn_row.addStretch()
+        outer.addLayout(btn_row)
+
+        def _add_schedule():
+            from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout,
+                                          QDialogButtonBox, QFileDialog,
+                                          QHBoxLayout, QRadioButton,
+                                          QButtonGroup, QSpinBox, QLabel,
+                                          QWidget, QLineEdit, QSizePolicy)
+            from core.scheduler import ScheduleConfig
+            from PyQt6.QtCore import Qt as _Qt
+
+            dlg = QDialog(self)
+            dlg.setWindowTitle(STRINGS["settings_sched_btn_add"])
+            dlg.setMinimumWidth(460)
+            layout = QVBoxLayout(dlg)
+            layout.setContentsMargins(16, 16, 16, 16)
+            layout.setSpacing(10)
+
+            # ── Folder picker ─────────────────────────────────────────────
+            folder_form = QFormLayout()
+            folder_row = QHBoxLayout()
+            folder_edit = QLineEdit()
+            folder_edit.setPlaceholderText("/path/to/folder")
+            btn_browse = QPushButton(STRINGS["settings_browse"])
+            btn_browse.clicked.connect(lambda: (
+                folder_edit.setText(p) if (p := QFileDialog.getExistingDirectory(
+                    dlg, STRINGS["settings_sched_lbl_folder"])) else None
+            ))
+            folder_row.addWidget(folder_edit, stretch=1)
+            folder_row.addWidget(btn_browse)
+            folder_form.addRow(STRINGS["settings_sched_lbl_folder"], folder_row)
+            layout.addLayout(folder_form)
+
+            # ── Interval type — three radio rows ──────────────────────────
+            interval_lbl = QLabel(STRINGS["settings_sched_lbl_interval"])
+            interval_lbl.setStyleSheet(f"color: {FG}; font-size: {get_font_pt()}pt;")
+            layout.addWidget(interval_lbl)
+
+            # Wrap all three rows in a tight sub-layout so they sit flush
+            radio_widget = QWidget()
+            radio_container = QVBoxLayout(radio_widget)
+            radio_container.setSpacing(4)
+            radio_container.setContentsMargins(4, 0, 0, 0)
+
+            grp = QButtonGroup(dlg)
+
+            SPIN_W = 90  # wide enough for 4-digit numbers without clipping
+
+            # Minutes row
+            row_min = QHBoxLayout()
+            row_min.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            radio_min = QRadioButton("Minutes")
+            spin_min = QSpinBox()
+            spin_min.setMinimum(1); spin_min.setMaximum(9999); spin_min.setValue(30)
+            spin_min.setFixedWidth(SPIN_W)
+            row_min.addWidget(radio_min)
+            row_min.addWidget(spin_min)
+            row_min.addStretch()
+
+            # Hours row
+            row_hr = QHBoxLayout()
+            row_hr.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            radio_hr = QRadioButton("Hours")
+            spin_hr = QSpinBox()
+            spin_hr.setMinimum(1); spin_hr.setMaximum(9999); spin_hr.setValue(1)
+            spin_hr.setFixedWidth(SPIN_W)
+            row_hr.addWidget(radio_hr)
+            row_hr.addWidget(spin_hr)
+            row_hr.addStretch()
+
+            # Days row
+            row_day = QHBoxLayout()
+            row_day.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            radio_day = QRadioButton("Days  at")
+            spin_day = QSpinBox()
+            spin_day.setMinimum(1); spin_day.setMaximum(9999); spin_day.setValue(1)
+            spin_day.setFixedWidth(SPIN_W)
+            time_edit = QLineEdit()
+            time_edit.setPlaceholderText("02:00")
+            time_edit.setFixedWidth(65)
+            time_edit.setText("02:00")
+            hint_lbl = QLabel(STRINGS["settings_sched_lbl_time_hint"])
+            hint_lbl.setStyleSheet(f"color: {FG2}; font-size: {get_font_pt_small()}pt;")
+            row_day.addWidget(radio_day)
+            row_day.addWidget(spin_day)
+            row_day.addWidget(time_edit)
+            row_day.addWidget(hint_lbl)
+            row_day.addStretch()
+
+            grp.addButton(radio_min)
+            grp.addButton(radio_hr)
+            grp.addButton(radio_day)
+            radio_hr.setChecked(True)   # default: every 1 hour
+
+            radio_container.addLayout(row_min)
+            radio_container.addLayout(row_hr)
+            radio_container.addLayout(row_day)
+            layout.addWidget(radio_widget)
+
+            # Error label
+            lbl_error = QLabel()
+            lbl_error.setStyleSheet(f"color: {RED};")
+            lbl_error.setVisible(False)
+            layout.addWidget(lbl_error)
+
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok |
+                QDialogButtonBox.StandardButton.Cancel
+            )
+            layout.addWidget(buttons)
+
+            def _accept():
+                lbl_error.setVisible(False)
+                folder = folder_edit.text().strip()
+                if not folder:
+                    lbl_error.setText(STRINGS["settings_sched_lbl_folder"] + " required.")
+                    lbl_error.setVisible(True)
+                    return
+
+                if radio_min.isChecked():
+                    itype, ival, tod = "minutes", spin_min.value(), ""
+                elif radio_hr.isChecked():
+                    itype, ival, tod = "hours", spin_hr.value(), ""
+                else:
+                    itype, ival = "days", spin_day.value()
+                    tod = time_edit.text().strip() if time_edit else ""
+                    # Validate HH:MM
+                    import re as _re
+                    if tod and not _re.match(r"^\d{1,2}:\d{2}$", tod):
+                        lbl_error.setText(STRINGS["settings_sched_invalid_time"])
+                        lbl_error.setVisible(True)
+                        return
+                    # Normalise to HH:MM
+                    if tod:
+                        try:
+                            hh, mm = tod.split(":")
+                            tod = f"{int(hh):02d}:{int(mm):02d}"
+                        except ValueError:
+                            lbl_error.setText(STRINGS["settings_sched_invalid_time"])
+                            lbl_error.setVisible(True)
+                            return
+
+                sc = ScheduleConfig(
+                    folder=folder,
+                    interval_type=itype,
+                    interval_value=ival,
+                    time_of_day=tod,
+                )
+                last = STRINGS["settings_sched_never"]
+                item_text = (f"{folder}    [{sc.display_label()}]    "
+                             f"{STRINGS['settings_sched_lbl_last_run']} {last}")
+                item = QListWidgetItem(item_text)
+                item.setData(_Qt.ItemDataRole.UserRole, sc)
+                self._sched_list.addItem(item)
+                self._sched_list.setVisible(True)
+                self._sched_empty_lbl.setVisible(False)
+                dlg.accept()
+
+            buttons.button(QDialogButtonBox.StandardButton.Ok).clicked.connect(_accept)
+            buttons.button(QDialogButtonBox.StandardButton.Cancel).clicked.connect(dlg.reject)
+            dlg.exec()
+
+        def _remove_schedule():
+            row = self._sched_list.currentRow()
+            if row < 0:
+                return
+            self._sched_list.takeItem(row)
+            if self._sched_list.count() == 0:
+                self._sched_list.setVisible(False)
+                self._sched_empty_lbl.setVisible(True)
+
+        btn_add.clicked.connect(_add_schedule)
+        btn_remove.clicked.connect(_remove_schedule)
+
+        self._tabs.addTab(tab, STRINGS["settings_tab_scheduler"])
 
     # ── Paths tab ────────────────────────────────────────────────────────
 
@@ -670,15 +1024,7 @@ class SettingsDialog(QDialog):
         # Button row
         btn_row = QHBoxLayout()
         btn_clear = QPushButton(STRINGS["settings_log_clear"])
-        btn_clear.setStyleSheet(
-            f"padding: 6px 16px; color: {FG2}; border: 1px solid {BORDER}; "
-            f"border-radius: 3px; background: {BG2};"
-        )
         btn_close = QPushButton(STRINGS["settings_btn_cancel"])
-        btn_close.setStyleSheet(
-            f"padding: 6px 16px; color: {FG2}; border: 1px solid {BORDER}; "
-            f"border-radius: 3px; background: {BG2};"
-        )
 
         def _clear():
             clear_log()
@@ -1087,6 +1433,24 @@ class SettingsDialog(QDialog):
         selected_font = self._font_size_names[self._font_combo.currentIndex()]
         prev_font = load_font_size()
         save_font_size(selected_font)
+
+        # Save watch folders
+        from core.watcher import save_watch_folders
+        watch_folders = [
+            self._watch_list.item(i).text()
+            for i in range(self._watch_list.count())
+        ]
+        save_watch_folders(watch_folders)
+
+        # Save schedules
+        from core.scheduler import save_schedules, ScheduleConfig
+        from PyQt6.QtCore import Qt as _Qt
+        schedules = []
+        for i in range(self._sched_list.count()):
+            sc = self._sched_list.item(i).data(_Qt.ItemDataRole.UserRole)
+            if isinstance(sc, ScheduleConfig):
+                schedules.append(sc)
+        save_schedules(schedules)
 
         self.accept()
 

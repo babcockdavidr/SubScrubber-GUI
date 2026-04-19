@@ -135,6 +135,26 @@ QPushButton#btn_save_green {{
 QPushButton#btn_save_green:hover {{ background: rgba(166, 227, 161, 0.15); border-color: {GREEN}; }}
 QPushButton#btn_save_green:disabled {{ color: {FG2}; border-color: {BORDER}; background: {BG3}; }}
 
+QPushButton#btn_settings_primary {{
+    color: {BG};
+    background: {ACCENT};
+    border: none;
+    font-weight: bold;
+    padding: 6px 18px;
+}}
+QPushButton#btn_settings_primary:hover {{ background: rgba(78, 158, 255, 0.8); }}
+QPushButton#btn_settings_primary:pressed {{ background: rgba(78, 158, 255, 0.6); }}
+
+QPushButton#btn_settings_warn {{
+    color: {BG};
+    background: {ORANGE};
+    border: none;
+    font-weight: bold;
+    padding: 6px 16px;
+}}
+QPushButton#btn_settings_warn:hover {{ background: rgba(250, 179, 135, 0.85); }}
+QPushButton#btn_settings_warn:pressed {{ background: rgba(250, 179, 135, 0.6); }}
+
 /* ── Lists ── */
 QListWidget {{
     background: {BG2};
@@ -224,6 +244,26 @@ QCheckBox::indicator {{
 }}
 QCheckBox::indicator:checked {{
     background: {ACCENT};
+    border-color: {ACCENT};
+}}
+
+QRadioButton {{
+    color: {FG};
+    font-size: {_get_fp()}pt;
+    spacing: 6px;
+}}
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border: 1px solid {BORDER};
+    border-radius: 7px;
+    background: {BG3};
+}}
+QRadioButton::indicator:checked {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+}}
+QRadioButton::indicator:hover {{
     border-color: {ACCENT};
 }}
 
@@ -462,15 +502,6 @@ class MainWindow(QMainWindow):
         self.resize(1200, 750)
         self.setMinimumSize(900, 600)
 
-        # Window icon
-        from core.paths import BASE_DIR
-        from PyQt6.QtGui import QIcon
-        for _icon_name in ("subforge.ico", "subforge.png"):
-            _icon_file = BASE_DIR / _icon_name
-            if _icon_file.exists():
-                self.setWindowIcon(QIcon(str(_icon_file)))
-                break
-
         self._subtitle: Optional[ParsedSubtitle] = None
         self._worker: Optional[AnalyzeWorker] = None
         self._file_queue: List[Path] = []
@@ -478,6 +509,26 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._connect_signals()
         self._restore_session()
+
+        # Watch folder manager — start watching any saved folders immediately
+        from core.watcher import WatchFolderManager, load_watch_folders
+        self._watcher_mgr = WatchFolderManager(parent=self)
+        self._watcher_mgr.file_cleaned.connect(self._on_watch_cleaned)
+        self._watcher_mgr.file_error.connect(self._on_watch_error)
+        self._watcher_mgr.status_changed.connect(self._on_watch_status_changed)
+        saved_folders = load_watch_folders()
+        if saved_folders:
+            self._watcher_mgr.set_folders(saved_folders)
+
+        # Scheduled scan manager — run any overdue jobs immediately on startup
+        from core.scheduler import SchedulerManager, load_schedules
+        self._scheduler_mgr = SchedulerManager(parent=self)
+        self._scheduler_mgr.scan_started.connect(self._on_sched_started)
+        self._scheduler_mgr.scan_finished.connect(self._on_sched_finished)
+        saved_schedules = load_schedules()
+        if saved_schedules:
+            self._scheduler_mgr.set_threshold(load_default_sensitivity())
+            self._scheduler_mgr.set_schedules(saved_schedules)
 
         if preload:
             self._enqueue_files(preload)
@@ -547,6 +598,14 @@ class MainWindow(QMainWindow):
         self._status.addPermanentWidget(self._scan_elapsed_label)
         self._status.addPermanentWidget(self._btn_check_updates)
         self._status.addPermanentWidget(self._version_label)
+
+        # Watch folder badge — hidden until at least one folder is active
+        self._watch_badge = QLabel()
+        self._watch_badge.setStyleSheet(
+            f"color: {GREEN}; font-size: {_get_fps()}pt; padding-right: 10px;"
+        )
+        self._watch_badge.setVisible(False)
+        self._status.addWidget(self._watch_badge)
 
         # Central layout
         central = QWidget()
@@ -758,8 +817,16 @@ class MainWindow(QMainWindow):
         self._btn_clean_all.setObjectName("btn_save_green")
         self._btn_clean_all.setToolTip(STRINGS["tip_sf_clean_save"])
         self._btn_clean_all.setEnabled(False)
+        self._btn_shift = QPushButton(STRINGS["sf_btn_shift"])
+        self._btn_shift.setToolTip(STRINGS["tip_sf_shift"])
+        self._btn_shift.setEnabled(False)
+        self._btn_stretch = QPushButton(STRINGS["sf_btn_stretch"])
+        self._btn_stretch.setToolTip(STRINGS["tip_sf_stretch"])
+        self._btn_stretch.setEnabled(False)
         action_bar.addWidget(self._btn_prev)
         action_bar.addWidget(self._btn_next)
+        action_bar.addWidget(self._btn_shift)
+        action_bar.addWidget(self._btn_stretch)
         action_bar.addStretch()
         action_bar.addWidget(self._lbl_stats)
         action_bar.addWidget(self._btn_clean_all)
@@ -781,7 +848,9 @@ class MainWindow(QMainWindow):
         self.setTabOrder(self._btn_keep,       self._btn_always_ad)
         self.setTabOrder(self._btn_always_ad,  self._btn_prev)
         self.setTabOrder(self._btn_prev,       self._btn_next)
-        self.setTabOrder(self._btn_next,       self._btn_clean_all)
+        self.setTabOrder(self._btn_next,       self._btn_shift)
+        self.setTabOrder(self._btn_shift,      self._btn_stretch)
+        self.setTabOrder(self._btn_stretch,    self._btn_clean_all)
 
         self._tabs.addTab(single_tab, STRINGS["tab_single_file"])
 
@@ -829,6 +898,8 @@ class MainWindow(QMainWindow):
         self._btn_mark_ad.clicked.connect(self._mark_current_as_ad)
         self._btn_keep.clicked.connect(self._keep_current)
         self._btn_clean_all.clicked.connect(self._save_current)
+        self._btn_shift.clicked.connect(self._shift_dialog)
+        self._btn_stretch.clicked.connect(self._stretch_dialog)
         self._btn_open_folder.clicked.connect(self._open_folder)
         self._btn_prev.clicked.connect(self._prev_file)
         self._btn_next.clicked.connect(self._next_file)
@@ -896,9 +967,11 @@ class MainWindow(QMainWindow):
         self._scan_elapsed_label.setText("⏱ 0:00")
         self._scan_elapsed_label.setVisible(True)
         self._scan_qtimer.start()
+        self._scheduler_mgr.set_scan_active(True)
 
     def _on_scan_stopped(self):
         self._scan_qtimer.stop()
+        self._scheduler_mgr.set_scan_active(False)
         # Leave the final time visible for 5 seconds so you can read it, then hide.
         QTimer.singleShot(5000, lambda: self._scan_elapsed_label.setVisible(False))
 
@@ -965,17 +1038,74 @@ class MainWindow(QMainWindow):
         import traceback
         from core.logger import append_error
         try:
-            dlg = SettingsDialog(self)
+            dlg = SettingsDialog(self, watcher_mgr=self._watcher_mgr)
             if dlg.exec():
                 v = load_default_sensitivity()
                 self._sf_slider.setValue(v)
                 self._batch_panel._slider.setValue(v)
                 self._video_panel._slider.setValue(v)
+                # Reload watch folders in case they changed
+                from core.watcher import load_watch_folders
+                self._watcher_mgr.set_threshold(v)
+                self._watcher_mgr.set_folders(load_watch_folders())
+                # Reload schedules in case they changed
+                from core.scheduler import load_schedules
+                self._scheduler_mgr.set_threshold(v)
+                self._scheduler_mgr.set_schedules(load_schedules())
         except Exception:
             err = traceback.format_exc()
             append_error("Settings", err)
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Error", f"Settings crashed:\n\n{err}")
+
+    # ── Watch folder handlers ─────────────────────────────────────────────
+
+    def _on_watch_status_changed(self, is_active: bool):
+        if is_active:
+            n = len(self._watcher_mgr.folders())
+            self._watch_badge.setText(
+                STRINGS["settings_watch_badge"].format(n=n)
+            )
+        self._watch_badge.setVisible(is_active)
+
+    def _on_watch_cleaned(self, path: str, ads_removed: int):
+        self._status.showMessage(
+            STRINGS["settings_watch_cleaned"].format(
+                path=Path(path).name, n=ads_removed
+            )
+        )
+
+    def _on_watch_error(self, path: str, error: str):
+        from core.logger import append_error
+        append_error("Watch Folders", f"{path}: {error}")
+        self._status.showMessage(
+            STRINGS["settings_watch_error"].format(
+                path=Path(path).name, error=error
+            )
+        )
+
+    # ── Scheduler handlers ────────────────────────────────────────────────
+
+    def _on_sched_started(self, folder: str):
+        self._status.showMessage(
+            STRINGS["settings_sched_started"].format(folder=Path(folder).name)
+        )
+
+    def _on_sched_finished(self, folder: str, cleaned: int,
+                            errors: int, total: int):
+        if cleaned == 0 and errors == 0:
+            self._status.showMessage(
+                STRINGS["settings_sched_finished_clean"].format(
+                    folder=Path(folder).name, total=total
+                )
+            )
+        else:
+            self._status.showMessage(
+                STRINGS["settings_sched_finished"].format(
+                    folder=Path(folder).name,
+                    cleaned=cleaned, errors=errors, total=total
+                )
+            )
 
     # ── Single File sensitivity ──────────────────────────────────────────────
 
@@ -1052,6 +1182,10 @@ class MainWindow(QMainWindow):
         self._detail_text.clear()
         self._reasons_text.clear()
         self._btn_clean_all.setEnabled(False)
+        self._btn_shift.setEnabled(False)
+        self._btn_stretch.setEnabled(False)
+        self._last_shift_offset = 0
+        self._original_timestamps = []
         self._lbl_file.setText(f"Loading {path.name}…")
         self._progress.setVisible(True)
         self._progress.setRange(0, 0)  # indeterminate
@@ -1067,6 +1201,13 @@ class MainWindow(QMainWindow):
     def _on_analysis_done(self, subtitle: ParsedSubtitle):
         self._subtitle = subtitle
         self._progress.setVisible(False)
+
+        # Snapshot original timestamps so Shift Timestamps can always
+        # recompute from the base rather than stacking incremental shifts.
+        self._original_timestamps = [
+            (b.start_time, b.end_time, b._ass_raw_line)
+            for b in subtitle.blocks
+        ]
 
         fmt = subtitle.fmt.value.upper()
         lang = subtitle.language
@@ -1087,6 +1228,8 @@ class MainWindow(QMainWindow):
                    ) if opts_list.any_enabled() else 0
         self._populate_block_list(subtitle)
         self._btn_clean_all.setEnabled(True)
+        self._btn_shift.setEnabled(True)
+        self._btn_stretch.setEnabled(True)
         status_parts = [f"{ads} ad block(s) found, {warns} warning(s)"]
         if opts:
             status_parts.append(f"{opts} opt(s)")
@@ -1289,6 +1432,283 @@ class MainWindow(QMainWindow):
 
     # ── Cross-panel navigation ──────────────────────────────────────────────
 
+    def _shift_dialog(self):
+        """Open the Shift Timestamps dialog and apply the offset if confirmed."""
+        if not self._subtitle:
+            return
+
+        from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout,
+                                      QLineEdit, QLabel, QVBoxLayout)
+        from core.subtitle import timedelta_to_srt_string
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(STRINGS["sf_dlg_shift_title"])
+        dlg.setMinimumWidth(380)
+
+        layout = QVBoxLayout(dlg)
+
+        lbl_desc = QLabel(STRINGS["sf_dlg_shift_label"])
+        lbl_desc.setWordWrap(True)
+        layout.addWidget(lbl_desc)
+
+        # Persist last used offset so reopening shows the previous value
+        last_offset = getattr(self, '_last_shift_offset', 0)
+        edit = QLineEdit(str(last_offset))
+        edit.setPlaceholderText("e.g. 500 or -1200")
+        edit.selectAll()
+        layout.addWidget(edit)
+
+        # Live preview panel — shows before/after for first 3 blocks
+        lbl_preview_title = QLabel(STRINGS["sf_dlg_shift_preview"])
+        layout.addWidget(lbl_preview_title)
+
+        lbl_preview = QLabel()
+        lbl_preview.setObjectName("file_status")
+        lbl_preview.setWordWrap(True)
+        layout.addWidget(lbl_preview)
+
+        lbl_error = QLabel()
+        lbl_error.setStyleSheet(f"color: {RED};")
+        lbl_error.setVisible(False)
+        layout.addWidget(lbl_error)
+
+        # Manual OK/Cancel buttons — do NOT connect buttons.accepted to dlg.accept()
+        # so Qt's default wiring doesn't close the dialog before our handler runs.
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        layout.addWidget(buttons)
+
+        import datetime as _dt
+
+        def _update_preview():
+            text = edit.text().strip()
+            try:
+                offset = int(text)
+            except ValueError:
+                lbl_preview.setText("")
+                return
+            delta = _dt.timedelta(milliseconds=offset)
+            zero  = _dt.timedelta(0)
+            lines = []
+            # Use original timestamps if available so preview always shows
+            # the absolute result from the base, not stacked on a prior shift.
+            orig = self._original_timestamps
+            blocks_to_show = self._subtitle.blocks[:3]
+            for i, b in enumerate(blocks_to_show):
+                if orig and i < len(orig):
+                    base_start = orig[i][0]
+                    base_end   = orig[i][1]
+                else:
+                    base_start = b.start_time
+                    base_end   = b.end_time
+                new_start = max(base_start + delta, zero)
+                new_end   = max(base_end   + delta, new_start)
+                lines.append(
+                    f"{timedelta_to_srt_string(base_start)}  →  "
+                    f"{timedelta_to_srt_string(new_start)}"
+                )
+            lbl_preview.setText("\n".join(lines))
+
+        edit.textChanged.connect(_update_preview)
+        _update_preview()
+
+        def _accept():
+            text = edit.text().strip()
+            try:
+                offset = int(text)
+            except ValueError:
+                lbl_error.setText(STRINGS["sf_dlg_shift_invalid"])
+                lbl_error.setVisible(True)
+                return
+            # Persist the value for next open
+            self._last_shift_offset = offset
+            # Restore original timestamps first so this is always an absolute
+            # offset from the base, not an incremental shift on top of a shift.
+            if self._original_timestamps and \
+                    len(self._original_timestamps) == len(self._subtitle.blocks):
+                for block, (orig_start, orig_end, orig_ass) in zip(
+                        self._subtitle.blocks, self._original_timestamps):
+                    block.start_time = orig_start
+                    block.end_time   = orig_end
+                    block._ass_raw_line = orig_ass
+            # Now apply the new offset (zero = back to original, already restored)
+            if offset != 0:
+                from core.subtitle import shift_timestamps
+                shift_timestamps(self._subtitle, offset)
+            self._populate_block_list(self._subtitle)
+            self._update_report()
+            # Force the list widget to repaint with updated data before the
+            # dialog closes and the main window takes focus.
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+            dlg.accept()
+            if offset == 0:
+                self._status.showMessage(
+                    f"Timestamps restored to original for {len(self._subtitle.blocks)} block(s)."
+                )
+            else:
+                direction = "later" if offset > 0 else "earlier"
+                self._status.showMessage(
+                    f"Shifted {len(self._subtitle.blocks)} block(s) "
+                    f"{abs(offset)} ms {direction}."
+                )
+
+        # Connect OK to our handler only — not to dlg.accept()
+        buttons.button(QDialogButtonBox.StandardButton.Ok).clicked.connect(_accept)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).clicked.connect(dlg.reject)
+        dlg.exec()
+
+    def _stretch_dialog(self):
+        """Open the Stretch Timing dialog and apply the rescale if confirmed."""
+        if not self._subtitle or not self._subtitle.blocks:
+            return
+
+        from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QLabel,
+                                      QVBoxLayout, QHBoxLayout, QLineEdit,
+                                      QGroupBox, QFormLayout)
+        from core.subtitle import stretch_timestamps, timedelta_to_srt_string, time_string_to_timedelta
+
+        # Helper — parse HH:MM:SS,mmm → ms, return None on failure
+        def _parse_ts(text: str):
+            text = text.strip()
+            if not text:
+                return None
+            try:
+                td = time_string_to_timedelta(text)
+                return int(td.total_seconds() * 1000)
+            except (ValueError, IndexError):
+                return None
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(STRINGS["sf_dlg_stretch_title"])
+        dlg.setMinimumWidth(440)
+
+        layout = QVBoxLayout(dlg)
+
+        intro = QLabel(STRINGS["sf_dlg_stretch_intro"])
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        # Anchor 1
+        grp1 = QGroupBox(STRINGS["sf_dlg_stretch_t1"])
+        form1 = QFormLayout(grp1)
+        edit1_cur = QLineEdit()
+        edit1_cur.setPlaceholderText("00:00:00,000")
+        edit1_new = QLineEdit()
+        edit1_new.setPlaceholderText("00:00:00,000")
+        form1.addRow(STRINGS["sf_dlg_stretch_current"], edit1_cur)
+        form1.addRow(STRINGS["sf_dlg_stretch_correct"], edit1_new)
+        layout.addWidget(grp1)
+
+        # Anchor 2
+        grp2 = QGroupBox(STRINGS["sf_dlg_stretch_t2"])
+        form2 = QFormLayout(grp2)
+        edit2_cur = QLineEdit()
+        edit2_cur.setPlaceholderText("00:00:00,000")
+        edit2_new = QLineEdit()
+        edit2_new.setPlaceholderText("00:00:00,000")
+        form2.addRow(STRINGS["sf_dlg_stretch_current"], edit2_cur)
+        form2.addRow(STRINGS["sf_dlg_stretch_correct"], edit2_new)
+        layout.addWidget(grp2)
+
+        # Pre-populate with first and last block timestamps as a convenience
+        if self._subtitle.blocks:
+            first = self._subtitle.blocks[0]
+            last  = self._subtitle.blocks[-1]
+            edit1_cur.setText(timedelta_to_srt_string(first.start_time))
+            edit1_new.setText(timedelta_to_srt_string(first.start_time))
+            edit2_cur.setText(timedelta_to_srt_string(last.start_time))
+            edit2_new.setText(timedelta_to_srt_string(last.start_time))
+
+        # Preview
+        lbl_preview_title = QLabel(STRINGS["sf_dlg_stretch_preview"])
+        layout.addWidget(lbl_preview_title)
+
+        lbl_preview = QLabel()
+        lbl_preview.setObjectName("file_status")
+        lbl_preview.setWordWrap(True)
+        layout.addWidget(lbl_preview)
+
+        lbl_error = QLabel()
+        lbl_error.setStyleSheet(f"color: {RED};")
+        lbl_error.setVisible(False)
+        layout.addWidget(lbl_error)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        layout.addWidget(buttons)
+
+        def _update_preview():
+            lbl_error.setVisible(False)
+            t1  = _parse_ts(edit1_cur.text())
+            nt1 = _parse_ts(edit1_new.text())
+            t2  = _parse_ts(edit2_cur.text())
+            nt2 = _parse_ts(edit2_new.text())
+            if any(v is None for v in (t1, nt1, t2, nt2)):
+                lbl_preview.setText("")
+                return
+            if t1 == t2 or nt1 == nt2:
+                lbl_preview.setText("")
+                return
+            import datetime as _dt
+            span_in  = t2 - t1
+            span_out = nt2 - nt1
+            scale    = span_out / span_in
+            zero     = _dt.timedelta(0)
+
+            def _remap(ms):
+                r = nt1 + (ms - t1) * scale
+                return _dt.timedelta(milliseconds=max(r, 0.0))
+
+            lines = []
+            for b in [self._subtitle.blocks[0], self._subtitle.blocks[-1]]:
+                orig_ms = b.start_time.total_seconds() * 1000
+                new_ts  = _remap(orig_ms)
+                lines.append(
+                    f"{timedelta_to_srt_string(b.start_time)}  →  "
+                    f"{timedelta_to_srt_string(new_ts)}"
+                )
+            lbl_preview.setText("\n".join(lines))
+
+        for w in (edit1_cur, edit1_new, edit2_cur, edit2_new):
+            w.textChanged.connect(_update_preview)
+        _update_preview()
+
+        def _accept():
+            lbl_error.setVisible(False)
+            t1  = _parse_ts(edit1_cur.text())
+            nt1 = _parse_ts(edit1_new.text())
+            t2  = _parse_ts(edit2_cur.text())
+            nt2 = _parse_ts(edit2_new.text())
+            if any(v is None for v in (t1, nt1, t2, nt2)):
+                lbl_error.setText(STRINGS["sf_dlg_stretch_invalid"])
+                lbl_error.setVisible(True)
+                return
+            if t1 == t2 or nt1 == nt2:
+                lbl_error.setText(STRINGS["sf_dlg_stretch_same"])
+                lbl_error.setVisible(True)
+                return
+            try:
+                stretch_timestamps(self._subtitle, t1, t2, nt1, nt2)
+            except ValueError as e:
+                lbl_error.setText(str(e))
+                lbl_error.setVisible(True)
+                return
+            self._populate_block_list(self._subtitle)
+            self._update_report()
+            dlg.accept()
+            self._status.showMessage(
+                f"Timing stretched across {len(self._subtitle.blocks)} block(s)."
+            )
+
+        buttons.button(QDialogButtonBox.StandardButton.Ok).clicked.connect(_accept)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).clicked.connect(dlg.reject)
+        dlg.exec()
+
     def _open_file_in_review(self, path: Path):
         """Called by batch panel — load a file into the review tab and switch to it."""
         # Add to queue if not already present
@@ -1451,7 +1871,13 @@ def launch_gui(preload: List[Path] = None):
         app = QApplication.instance() or QApplication(sys.argv)
         from gui.settings_dialog import load_font_size as _load_font_size
         _font_pt = {"small": 9, "medium": 11, "large": 14}.get(_load_font_size(), 11)
-        from PyQt6.QtGui import QFont
+        from PyQt6.QtGui import QFont, QIcon
+        from core.paths import BASE_DIR as _BASE_DIR
+        for _icon_name in ("subforge.ico", "subforge.png"):
+            _icon_file = _BASE_DIR / _icon_name
+            if _icon_file.exists():
+                app.setWindowIcon(QIcon(str(_icon_file)))
+                break
         app.setFont(QFont("Consolas", _font_pt))
         app.setStyleSheet(build_stylesheet())
         win = MainWindow(preload=preload or [])
