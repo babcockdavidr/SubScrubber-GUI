@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="subforge.png" width="80" height="80">
-</p>
-
-# SubForge — v1.0.0: Accessibility, Themes & Release
+# <img src="subforge.png" width="60" height="60"> SubForge — v1.0.0: Accessibility, Themes & Release
 
 **Clean, scan, and create subtitle files — all in one place, all on your machine.**
 
