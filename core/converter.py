@@ -125,7 +125,8 @@ class ConvertResult:
 # Single-file conversion
 # ---------------------------------------------------------------------------
 
-def convert_file(src: Path, target_id: str) -> ConvertResult:
+def convert_file(src: Path, target_id: str,
+                 keep_backup: bool = False) -> ConvertResult:
     """
     Convert *src* to the format identified by *target_id*.
 
@@ -134,9 +135,13 @@ def convert_file(src: Path, target_id: str) -> ConvertResult:
     extension, a ``_converted`` suffix is appended to the stem to avoid
     clobbering the original.
 
+    If *keep_backup* is True, the source file is copied to
+    ``<stem>.backup<ext>`` before writing output.
+
     Returns a ConvertResult with the output path on success.
     """
     import pysubs2
+    import shutil
 
     tgt_fmt = format_by_id(target_id)
     if tgt_fmt is None:
@@ -159,6 +164,14 @@ def convert_file(src: Path, target_id: str) -> ConvertResult:
         while out_path.exists():
             out_path = src.parent / f"{out_stem}.{counter}{tgt_fmt.ext}"
             counter += 1
+
+    # Write backup before touching anything
+    if keep_backup:
+        backup_path = src.parent / f"{src.stem}.backup{src.suffix}"
+        try:
+            shutil.copy2(str(src), str(backup_path))
+        except Exception as exc:
+            return ConvertResult(success=False, error=f"Backup failed: {exc}")
 
     try:
         subs = pysubs2.load(str(src))
@@ -183,12 +196,14 @@ class BatchConvertResult:
 
 
 def convert_folder(folder: Path, target_id: str,
-                   recursive: bool = False) -> BatchConvertResult:
+                   recursive: bool = False,
+                   keep_backup: bool = False) -> BatchConvertResult:
     """
     Convert all supported subtitle files in *folder* to *target_id*.
 
     Files whose extension already matches the target are skipped.
     Errors are collected per-file; a single failure does not abort the batch.
+    If *keep_backup* is True, each source file is backed up before conversion.
     """
     tgt_fmt = format_by_id(target_id)
     if tgt_fmt is None:
@@ -208,7 +223,7 @@ def convert_folder(folder: Path, target_id: str,
         if src.suffix.lower() == tgt_fmt.ext:
             result.skipped += 1
             continue
-        r = convert_file(src, target_id)
+        r = convert_file(src, target_id, keep_backup=keep_backup)
         if r.success:
             result.converted += 1
         else:
