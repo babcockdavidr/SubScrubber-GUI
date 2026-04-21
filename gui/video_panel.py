@@ -35,6 +35,13 @@ from core import block_will_be_removed
 from .colors import BG, BG2, BG3, BORDER, FG, FG2, ACCENT, RED, ORANGE, GREEN, YELLOW
 from .settings_dialog import get_font_pt as _get_fp, get_font_pt_small as _get_fps, get_font_pt_tiny as _get_fpt
 
+# ffsubsync is optional — check once at import time
+try:
+    import ffsubsync as _ffsubsync  # noqa: F401
+    _FFSUBSYNC_AVAILABLE = True
+except ImportError:
+    _FFSUBSYNC_AVAILABLE = False
+
 THRESHOLD_LABELS = {
     1: STRINGS["thresh_1"],
     2: STRINGS["thresh_2"],
@@ -441,8 +448,43 @@ class RemuxWorker(QThread):
 
 
 # ---------------------------------------------------------------------------
-# Progress dialog
+# Audio sync worker (Embedded Subs detail pane)
 # ---------------------------------------------------------------------------
+class VideoAudioSyncWorker(QThread):
+    """Runs ffsubsync against an extracted subtitle track."""
+    finished = pyqtSignal(str)
+    error    = pyqtSignal(str)
+
+    def __init__(self, sub_path: Path, video_path: Path, output_path: Path):
+        super().__init__()
+        self.sub_path    = sub_path
+        self.video_path  = video_path
+        self.output_path = output_path
+
+    def run(self):
+        import subprocess
+        import sys as _sys
+        try:
+            cmd = [
+                _sys.executable, "-m", "ffsubsync",
+                str(self.video_path),
+                "-i", str(self.sub_path),
+                "-o", str(self.output_path),
+            ]
+            creationflags = 0
+            if _sys.platform == "win32":
+                creationflags = subprocess.CREATE_NO_WINDOW
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True,
+                creationflags=creationflags,
+            )
+            if proc.returncode != 0:
+                err = proc.stderr.strip() or proc.stdout.strip() or "ffsubsync exited non-zero"
+                self.error.emit(err)
+            else:
+                self.finished.emit(str(self.output_path))
+        except Exception as exc:
+            self.error.emit(str(exc))
 
 class RemuxProgressDialog(QDialog):
     def __init__(self, parent=None):
@@ -645,6 +687,7 @@ class VideoScanPanel(QWidget):
         self._current_result: Optional[VideoScanResult] = None
         self._current_track:  Optional[SubtitleTrack]   = None
         self._status_text: str = STRINGS["video_status_begin"]
+        self._sync_worker: Optional[VideoAudioSyncWorker] = None
         self._build_ui()
         self._check_tools()
 
@@ -878,6 +921,13 @@ class VideoScanPanel(QWidget):
         btn_row.addWidget(self._btn_open_image_subs)
         btn_row.addWidget(self._btn_open_transcribe)
         btn_row.addWidget(self._btn_mark_delete)
+        # "Sync to Audio" — visible only when a text track is selected and
+        # ffsubsync is installed; hidden otherwise
+        self._btn_sync_audio = QPushButton(STRINGS["sf_btn_sync_audio"])
+        self._btn_sync_audio.setToolTip(STRINGS["tip_sf_sync_audio"])
+        self._btn_sync_audio.setVisible(False)
+        self._btn_sync_audio.clicked.connect(self._sync_track_to_audio)
+        btn_row.addWidget(self._btn_sync_audio)
         btn_row.addStretch()
         rl.addWidget(lbl_detail)
         rl.addLayout(btn_row)
@@ -1001,6 +1051,7 @@ class VideoScanPanel(QWidget):
         self._lbl_edit_hint.setVisible(False)
         self._tracks_to_delete.clear()
         self._btn_mark_delete.setVisible(False)
+        self._btn_sync_audio.setVisible(False)
         self._btn_remux.setEnabled(False)
         self._btn_extract.setEnabled(False)
         self._lbl_selected.setText(STRINGS["video_lbl_selected"])
@@ -1328,6 +1379,7 @@ class VideoScanPanel(QWidget):
                 not has_any_subs and not has_external
             )
             self._btn_mark_delete.setVisible(False)
+            self._btn_sync_audio.setVisible(False)
         elif data[0] == "track":
             self._current_result = data[1]
             self._current_track  = data[2]
@@ -1339,6 +1391,10 @@ class VideoScanPanel(QWidget):
             self._btn_open_image_subs.setVisible(track.is_image)
             # Transcribe button never shown at track-row level
             self._btn_open_transcribe.setVisible(False)
+            # Sync button: only for text tracks when ffsubsync is installed
+            self._btn_sync_audio.setVisible(
+                _FFSUBSYNC_AVAILABLE and track.is_text
+            )
             # Switch to edit table if the track has been scanned and has text
             if track.is_text and track.subtitle and track.subtitle.blocks:
                 self._populate_edit_table(track)
@@ -1673,6 +1729,61 @@ class VideoScanPanel(QWidget):
                     child.setCheckState(0, Qt.CheckState.Unchecked)
         self._tree.blockSignals(False)
         self._refresh_remux_button()
+
+    # ── Audio sync (Embedded Subs detail pane) ────────────────────────
+
+    def _sync_track_to_audio(self):
+        """Extract the selected text track, run ffsubsync, offer to open result."""
+        if self._current_result is None or self._current_track is None:
+            return
+        track = self._current_track
+        video_path = self._current_result.path
+
+        if not track.is_text or track.subtitle is None:
+            QMessageBox.information(
+                self, STRINGS["sync_dlg_error_title"],
+                "Please scan the track first so SubForge has the subtitle data."
+            )
+            return
+
+        # Write the subtitle to a temp .srt next to the video
+        import tempfile
+        from core import write_subtitle
+        tmp_dir = Path(tempfile.gettempdir())
+        stem = video_path.stem
+        sub_path = tmp_dir / f"{stem}_track{track.track_num}.srt"
+        out_path = tmp_dir / f"{stem}_track{track.track_num}.synced.srt"
+        try:
+            write_subtitle(track.subtitle, dest=sub_path)
+        except Exception as exc:
+            QMessageBox.warning(self, STRINGS["sync_dlg_error_title"], str(exc))
+            return
+
+        self._btn_sync_audio.setEnabled(False)
+        self._set_status(STRINGS["sync_status_running"])
+        self._sync_worker = VideoAudioSyncWorker(sub_path, video_path, out_path)
+        self._sync_worker.finished.connect(self._on_sync_track_done)
+        self._sync_worker.error.connect(self._on_sync_track_error)
+        self._sync_worker.start()
+
+    def _on_sync_track_done(self, out_path: str):
+        self._btn_sync_audio.setEnabled(True)
+        p = Path(out_path)
+        self._set_status(STRINGS["sync_status_done"].format(name=p.name))
+        QMessageBox.information(
+            self,
+            STRINGS["sync_dlg_done_title"],
+            STRINGS["sync_dlg_done_text"].format(name=p.name),
+        )
+
+    def _on_sync_track_error(self, msg: str):
+        self._btn_sync_audio.setEnabled(True)
+        self._set_status(STRINGS["sync_status_error"])
+        QMessageBox.warning(
+            self,
+            STRINGS["sync_dlg_error_title"],
+            STRINGS["sync_dlg_error_text"].format(msg=msg),
+        )
 
     # ── Public API ────────────────────────────────────────────────────
 

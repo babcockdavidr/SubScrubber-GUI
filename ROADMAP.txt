@@ -1,108 +1,60 @@
 SubForge — Development Roadmap
-Last updated: v1.0.1 (complete) — next: v1.1.0
+Last updated: v1.1.0 (in progress) — Phases 1–3 complete, Phase 4 complete, batch sync dropped
 ================================================================================
 
-v1.0.1 — Scheduled Scanning & Timing Tools
---------------------------------------------------------------------------------
-  GOAL: Background automation and the first timing manipulation tools.
-
-  - [x] Timestamp shift. Single File action bar button "Shift Timestamps…".
-    Offsets all blocks by a fixed ms value. Always absolute from original
-    timestamps — entering 0 restores the file exactly. Live before/after
-    preview of first 3 blocks reads from originals so it's always accurate.
-    Persists last used value per file. Non-destructive until Clean & Save.
-    Dialog uses direct button wiring (not buttons.accepted) to avoid Qt
-    double-fire race that caused only the first block to update.
-
-  - [x] Timestamp stretch/compress. Companion "Stretch Timing…" button.
-    Two-anchor linear rescale for framerate drift correction. Pre-filled with
-    first/last block timestamps. Live preview of first/last block.
-    HH:MM:SS,mmm input format. Non-destructive until Clean & Save.
-
-  - [x] Watch folders (plural). New Settings > Watch Folders tab. Multiple
-    folders supported (different drives, movies vs TV). QFileSystemWatcher —
-    OS-level notifications, no polling. Fully recursive: top-level and all
-    subdirectories registered; new subdirs auto-added on creation.
-    File-size stability check (250 ms polls, 10 s timeout) before processing
-    — handles Windows Explorer copy lock without arbitrary sleep retries.
-    Existing-file warning dialog shows file count and current sensitivity;
-    requires explicit "I Understand" confirmation before cleaning.
-    Errors written to error log (append_error) as well as status bar.
-    Status bar badge shows active folder count. Persists in settings.json.
-
-  - [x] Scheduled scanning. New Settings > Scheduler tab. Flexible per-folder
-    schedule: every X minutes, every X hours, or every X days at a specific
-    HH:MM wall-clock time. Free-form spinbox + radio button UI replaces the
-    old three-option dropdown. Overdue jobs run immediately on startup.
-    Deferred during active manual scans via set_scan_active() lock.
-    Last-run timestamp saved immediately on job start (crash-safe).
-    Legacy "hourly"/"nightly"/"weekly" configs migrate automatically.
-    Status bar start/finish messages. Persists in settings.json under
-    "schedules" key as interval_type/interval_value/time_of_day.
-
-  - [x] Settings dialog button hover/active states. All inline setStyleSheet
-    calls removed from settings dialog buttons. Buttons now inherit the global
-    app stylesheet QPushButton rules, restoring hover and pressed visual
-    feedback. Save button uses btn_settings_primary object name (blue);
-    "I Understand" warning button uses btn_settings_warn object name (orange).
-    QRadioButton stylesheet added to global app stylesheet (was missing
-    entirely, causing selected state to be nearly invisible).
-
-  - [x] App icon — desktop/Start Menu fix. Installer [Files] section now
-    explicitly installs subforge.ico from repo root into {app}, independent
-    of PyInstaller output. Both Start Menu and desktop shortcuts reference
-    {app}\subforge.ico via IconFilename. PyInstaller spec updated to include
-    subforge.ico in datas so runtime BASE_DIR lookup finds it. CFBundleVersion
-    bumped to 1.0.1. Title bar icon removed (app-level icon only) to avoid
-    showing in the window chrome while keeping taskbar/Start Menu correct.
-
-  - [x] clean() call bug fixed in watcher.py and scheduler.py. Both workers
-    were calling clean(sub, threshold=self._threshold) which doesn't exist —
-    clean() has no threshold parameter. Fixed to manually filter blocks by
-    id() set, matching the pattern used throughout the rest of the app.
-
-  - [x] 14 language packs updated for all new strings.
-
-  - [x] Full testing pass complete. v1.0.1 tagged.
-
-
-v1.1.0 — Find & Replace and Audio Sync
+v1.1.0 — Find & Replace, Audio Sync & Automatic Updates
 --------------------------------------------------------------------------------
   GOAL: The two biggest workflow quality-of-life features that no other
   all-in-one subtitle tool handles well.
 
-  - Global find & replace. A toolbar button (or Ctrl+H shortcut) opens a
-    find/replace dialog that operates on the currently loaded subtitle file
-    in the Single File tab. Supports plain text and regex. "Replace All" with
-    a confirmation count. "Replace & Next" for stepping through matches.
-    Matched text is highlighted in the block list. Changes are tracked in the
-    existing undo/redo history (see below).
+  - [DONE] Global find & replace. Ctrl+H / "Find & Replace…" button in the
+    Single File action bar opens a modeless dialog. Supports plain text and
+    regex with optional case-sensitivity. "Find Next" steps through highlighted
+    matches. "Replace" replaces the current match and advances. "Replace All"
+    replaces every match with a confirmation count. Each replacement is pushed
+    onto the QUndoStack so it can be individually undone with Ctrl+Z.
 
-  - Undo/redo in Single File tab. Every block state change (Mark as Ad, Keep
-    Block, Always Mark as Ad, find/replace edits, timing edits) is pushed onto
-    a QUndoStack. Ctrl+Z / Ctrl+Y. The undo stack is cleared when a new file
-    is loaded. Status bar shows "Undone: X" after each undo.
+  - [DONE] Undo/redo in Single File tab. Every block state change (Mark as Ad,
+    Keep Block) is pushed onto a QUndoStack. Ctrl+Z / Ctrl+Y. The undo stack
+    is cleared when a new file is loaded. Status bar shows "Undone: X" /
+    "Redone: X" after each operation. Find/replace edits and timing edits
+    will be added to the stack in their respective phases.
 
-  - Audio sync via ffsubsync. A "Sync to Audio…" button in the Single File
-    tab and the Embedded Subs detail pane. Runs ffsubsync (pip install
-    ffsubsync) against the paired video file to automatically align subtitle
-    timestamps with the audio track. The video path is auto-detected from the
-    subtitle filename if a matching video file sits next to it; otherwise a
-    file picker appears. Runs in a background thread; shows progress in the
-    status bar. ffsubsync is an optional dependency — the button is hidden
-    (not just disabled) when it is not installed, with a tooltip explaining
-    how to install it.
+  - [DONE] Audio sync via ffsubsync. A "Sync to Audio…" button in the Single
+    File tab action bar and the Embedded Subs detail pane. Runs ffsubsync
+    (pip install ffsubsync) against the paired video file to automatically
+    align subtitle timestamps with the audio track. The video path is
+    auto-detected from the subtitle filename if a matching video file sits
+    next to it; otherwise a file picker appears. Runs in a background thread;
+    shows progress in the status bar. ffsubsync is an optional dependency —
+    the button is hidden (not just disabled) when it is not installed.
 
-  - Batch audio sync. An "Auto-Sync All" option in the Batch tab action row,
-    alongside Scan All and Clean & Save All. Runs ffsubsync on every file in
-    the batch against a paired video file (same directory, same stem). Files
-    without a matching video are skipped and reported.
+  - [DROPPED] Batch audio sync. Removed from scope — applying ffsubsync
+    unsupervised across an entire subtitle collection is too risky. ffsubsync
+    exits 0 whether the sync is good or bad, there is no reliable quality
+    signal, and a language mismatch (e.g. English subs on a foreign-language
+    dub) produces silently broken timing with no warning. The single-file
+    "Sync to Audio…" button (Phase 3) is the right scope. See UNDER
+    CONSIDERATION below for a safer future design.
+
+
+  - [DONE — BETA] Auto-update. When a newer release is detected, SubForge
+    opens a dialog showing the version, release name, and changelog excerpt.
+    On Windows, a "Download && Install" button streams the installer directly
+    in-app with a live progress bar, verifies the SHA-256 checksum published
+    alongside the release, then launches the Inno Setup installer with
+    /SILENT /CLOSEAPPLICATIONS and exits. If no checksum asset is found the
+    user is warned before downloading. On non-Windows platforms only the
+    "Open in Browser" fallback is shown. Testing requires a live GitHub
+    release with matching SubForge-*-setup.exe and .sha256 assets.
 
 
 v1.2.0 — Burn-in, Split/Merge & Style Editor
 --------------------------------------------------------------------------------
   GOAL: Output and editing features that complete SubForge's role as a
   full-lifecycle subtitle tool.
+
+  - Auto-update confirm working.
 
   - Burn-in subtitles. A "Burn In…" button in the Single File and Embedded Subs
     tabs. Uses ffmpeg's subtitles filter to render the subtitle track permanently
@@ -179,15 +131,8 @@ v1.4.0 — Media Server Integration & ML Detection
     regex engine as a second scoring signal. ML score adds up to +2 points to
     the block's total — it cannot override a regex match, only reinforce it.
     The model is retrained periodically and distributed as a binary blob via
-    the community profile sync mechanism. Users can opt out in Settings >
-    Cleaning Options.
-
-  - Auto-update. Download the latest release installer/binary directly in-app
-    rather than opening the browser. Shows a changelog summary before
-    downloading. Verifies the download with a SHA-256 checksum published
-    alongside each GitHub release. On Windows, downloads the new .exe, launches
-    it with /SILENT, and exits. Requires careful design — do not implement
-    without checksum verification.
+    the community profile sync mechanism. Off by default for speed. Users can opt in in Settings >
+    Cleaning Options. Maybe this is a candidate for the Setup Wizard.
 
 
 ================================================================================
@@ -217,6 +162,21 @@ POST-1.4 — FUTURE IDEAS
     in the Single File block list.
   - Use pyenchant or languagetool-python as the backend.
   - Must be language-aware — use the detected subtitle language.
+
+
+================================================================================
+UNDER CONSIDERATION
+================================================================================
+
+  BATCH AUDIO SYNC (REVIEWED, NOT YET SAFE)
+  - A safer design than the dropped batch auto-sync: run ffsubsync on every
+    file in the batch, then present a review table showing before/after timing
+    diffs per file (first block timestamp, last block timestamp, total shift).
+    The user can approve or reject each file individually before any writes
+    occur. Files where the computed shift looks implausible (e.g. > 10 minutes,
+    or a non-monotonic result) are flagged automatically. Only approved files
+    are written. This is a meaningful separate feature, not a one-liner — scope
+    it as its own release item when the demand is clear.
 
 
 ================================================================================

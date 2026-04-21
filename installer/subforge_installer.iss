@@ -8,12 +8,12 @@
 ;      (or run: iscc subforge_installer.iss from the repo root)
 ;
 ; Output:
-;   Output\SubForge-1.0.1-setup.exe
+;   Output\SubForge-1.1.0-setup.exe
 ;
 ; Inno Setup download: https://jrsoftware.org/isinfo.php
 
 #define AppName      "SubForge"
-#define AppVersion   "1.0.1"
+#define AppVersion   "1.1.0"
 #define AppPublisher "David R. Babcock"
 #define AppURL       "https://github.com/babcockdavidr/SubForge"
 #define AppExeName   "SubForge.exe"

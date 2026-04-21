@@ -3,6 +3,7 @@ SubForge GUI — PyQt6
 Dark industrial theme. Diff review workflow: flag → approve/deny per block.
 """
 from __future__ import annotations
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -14,13 +15,15 @@ from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QMimeData, QUrl,
                            QSize, QTimer)
 from PyQt6.QtGui import (QColor, QFont, QIcon, QPalette, QDragEnterEvent,
                           QDropEvent, QKeySequence, QShortcut, QTextCharFormat,
-                          QSyntaxHighlighter, QTextDocument)
+                          QSyntaxHighlighter, QTextDocument, QUndoStack,
+                          QUndoCommand)
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QListWidget, QListWidgetItem, QSplitter,
     QTextEdit, QFrame, QScrollArea, QFileDialog, QMessageBox,
     QProgressBar, QStatusBar, QToolBar, QCheckBox, QTabWidget,
     QSizePolicy, QAbstractItemView, QGroupBox, QSlider,
+    QDialog, QDialogButtonBox, QLineEdit, QGridLayout,
 )
 
 from core import load_subtitle, write_subtitle, analyze, clean, SUPPORTED_EXTENSIONS
@@ -381,6 +384,84 @@ class UpdateWorker(QThread):
             self.result_ready.emit(tag, name)
 
 
+class DownloadWorker(QThread):
+    """Downloads a release asset in a background thread with progress reporting."""
+    progress = pyqtSignal(int, int)   # bytes_done, total_bytes
+    finished = pyqtSignal(str)        # path to downloaded file
+    error    = pyqtSignal(str)
+
+    def __init__(self, url: str, dest: Path):
+        super().__init__()
+        self.url  = url
+        self.dest = dest
+
+    def run(self):
+        from core.updater import download_file
+        err = download_file(
+            self.url, self.dest,
+            progress_cb=lambda done, total: self.progress.emit(done, total),
+        )
+        if err:
+            self.error.emit(err)
+        else:
+            self.finished.emit(str(self.dest))
+
+
+# ---------------------------------------------------------------------------
+# ffsubsync availability — checked once at import time
+# ---------------------------------------------------------------------------
+def _ffsubsync_available() -> bool:
+    try:
+        import ffsubsync  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+FFSUBSYNC_AVAILABLE: bool = _ffsubsync_available()
+
+
+# ---------------------------------------------------------------------------
+# Audio sync worker (Single File tab)
+# ---------------------------------------------------------------------------
+class AudioSyncWorker(QThread):
+    """Runs ffsubsync in a background thread to align a subtitle file to audio."""
+    finished = pyqtSignal(str)   # path to synced output file
+    error    = pyqtSignal(str)
+
+    def __init__(self, sub_path: Path, video_path: Path, output_path: Path):
+        super().__init__()
+        self.sub_path    = sub_path
+        self.video_path  = video_path
+        self.output_path = output_path
+
+    def run(self):
+        import subprocess
+        import sys as _sys
+        try:
+            cmd = [
+                _sys.executable, "-m", "ffsubsync",
+                str(self.video_path),
+                "-i", str(self.sub_path),
+                "-o", str(self.output_path),
+            ]
+            creationflags = 0
+            if _sys.platform == "win32":
+                creationflags = subprocess.CREATE_NO_WINDOW
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                creationflags=creationflags,
+            )
+            if proc.returncode != 0:
+                err = proc.stderr.strip() or proc.stdout.strip() or "ffsubsync exited non-zero"
+                self.error.emit(err)
+            else:
+                self.finished.emit(str(self.output_path))
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Block row widget (used inside the review list)
 # ---------------------------------------------------------------------------
@@ -434,6 +515,496 @@ class BlockRow(QListWidgetItem):
     def toggle_ad(self):
         self.block.regex_matches = 3 if self.block.regex_matches < 3 else -1
         self._update_display()
+
+
+# ---------------------------------------------------------------------------
+# Undo/Redo command for block state changes
+# ---------------------------------------------------------------------------
+class BlockStateCommand(QUndoCommand):
+    """Records a before/after snapshot of a single block's ad-detection state.
+
+    The command holds a weak reference to the BlockRow item so it does not
+    prevent garbage collection when the block list is cleared.  If the item
+    is gone (file was closed) undo/redo are no-ops.
+    """
+
+    def __init__(
+        self,
+        item: "BlockRow",
+        old_matches: int,
+        old_score: float,
+        new_matches: int,
+        new_score: float,
+        description: str,
+        refresh_cb,          # callable() — triggers _refresh_stats()
+        select_cb,           # callable(row) — triggers _block_list.setCurrentRow()
+        row: int,
+    ):
+        super().__init__(description)
+        import weakref
+        self._item_ref   = weakref.ref(item)
+        self._old_matches = old_matches
+        self._old_score   = old_score
+        self._new_matches = new_matches
+        self._new_score   = new_score
+        self._refresh_cb  = refresh_cb
+        self._select_cb   = select_cb
+        self._row         = row
+
+    def _apply(self, matches: int, score: float):
+        item = self._item_ref()
+        if item is None:
+            return
+        item.block.regex_matches = matches
+        item.block.ad_score      = score
+        item._update_display()
+        self._refresh_cb()
+        self._select_cb(self._row)
+
+    def redo(self):
+        self._apply(self._new_matches, self._new_score)
+
+    def undo(self):
+        self._apply(self._old_matches, self._old_score)
+
+
+# ---------------------------------------------------------------------------
+# Undo/Redo command for find-and-replace text edits
+# ---------------------------------------------------------------------------
+class TextEditCommand(QUndoCommand):
+    """Records a before/after content snapshot for a single block text edit."""
+
+    def __init__(
+        self,
+        item: "BlockRow",
+        old_content: str,
+        new_content: str,
+        refresh_cb,
+        select_cb,
+        row: int,
+    ):
+        super().__init__(STRINGS["undo_replace"])
+        import weakref
+        self._item_ref   = weakref.ref(item)
+        self._old_content = old_content
+        self._new_content = new_content
+        self._refresh_cb  = refresh_cb
+        self._select_cb   = select_cb
+        self._row         = row
+
+    def _apply(self, content: str):
+        item = self._item_ref()
+        if item is None:
+            return
+        item.block.content = content
+        item._update_display()
+        self._refresh_cb()
+        self._select_cb(self._row)
+
+    def redo(self):
+        self._apply(self._new_content)
+
+    def undo(self):
+        self._apply(self._old_content)
+
+
+# ---------------------------------------------------------------------------
+# Update available dialog (in-app download with SHA-256 verification)
+# ---------------------------------------------------------------------------
+class UpdateAvailableDialog(QDialog):
+    """
+    Shown when a newer release is detected.  On Windows the user can download
+    and install directly in-app; on other platforms only the browser fallback
+    is offered.  No download starts until the user explicitly clicks the button.
+    """
+
+    def __init__(self, parent, release: dict):
+        super().__init__(parent)
+        self.setWindowTitle(STRINGS["dlg_update_available"])
+        self.setMinimumWidth(520)
+        self.setModal(True)
+
+        self._release  = release
+        self._installer_asset  = None
+        self._expected_digest  = ""
+        self._download_worker  = None
+        self._downloaded_path: Optional[Path] = None
+
+        from core.updater import CURRENT_VERSION, find_installer_asset
+        installer, digest = find_installer_asset(release.get("assets", []))
+        self._installer_asset = installer
+        self._expected_digest = digest
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Version info
+        tag  = release.get("tag_name", "?")
+        name = release.get("name", tag)
+        lbl_ver = QLabel(
+            f"<b>{STRINGS['upd_new_version']}</b> {tag}  ({name})<br>"
+            f"<span style='color:{FG2}'>{STRINGS['upd_current_version']} {CURRENT_VERSION}</span>"
+        )
+        lbl_ver.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(lbl_ver)
+
+        # Changelog excerpt
+        body = release.get("body", "").strip()
+        if body:
+            lbl_notes_hdr = QLabel(STRINGS["upd_release_notes"])
+            lbl_notes_hdr.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
+            layout.addWidget(lbl_notes_hdr)
+            notes = QTextEdit()
+            notes.setReadOnly(True)
+            notes.setMaximumHeight(160)
+            notes.setFont(QFont("Consolas", 10))
+            notes.setPlainText(body[:1200] + ("…" if len(body) > 1200 else ""))
+            notes.setStyleSheet(
+                f"background: {BG2}; color: {FG2}; border: 1px solid {BORDER};"
+                f"border-radius: 4px; padding: 4px;"
+            )
+            layout.addWidget(notes)
+
+        # SHA-256 notice
+        if not self._expected_digest:
+            lbl_warn = QLabel(STRINGS["upd_no_checksum_warn"])
+            lbl_warn.setStyleSheet(f"color: {ORANGE};")
+            lbl_warn.setWordWrap(True)
+            layout.addWidget(lbl_warn)
+
+        # Progress bar (hidden until download starts)
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setMaximumHeight(6)
+        self._progress_bar.setVisible(False)
+        layout.addWidget(self._progress_bar)
+
+        self._lbl_status = QLabel("")
+        self._lbl_status.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
+        self._lbl_status.setVisible(False)
+        layout.addWidget(self._lbl_status)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+
+        self._btn_download = QPushButton(STRINGS["upd_btn_download"])
+        self._btn_download.setObjectName("btn_save_green")
+        # Only offer in-app download on Windows and when installer asset exists
+        import sys as _sys
+        can_download = (_sys.platform == "win32" and installer is not None)
+        self._btn_download.setVisible(can_download)
+        self._btn_download.clicked.connect(self._start_download)
+
+        btn_browser = QPushButton(STRINGS["upd_btn_browser"])
+        btn_browser.clicked.connect(self._open_browser)
+
+        btn_later = QPushButton(STRINGS["upd_btn_later"])
+        btn_later.clicked.connect(self.reject)
+
+        btn_row.addWidget(self._btn_download)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_browser)
+        btn_row.addWidget(btn_later)
+        layout.addLayout(btn_row)
+
+    # ── slots ─────────────────────────────────────────────────────────────
+
+    def _open_browser(self):
+        import webbrowser
+        from core.updater import RELEASES_URL
+        webbrowser.open(RELEASES_URL)
+        self.accept()
+
+    def _start_download(self):
+        if self._installer_asset is None:
+            return
+        import tempfile
+        dest = Path(tempfile.gettempdir()) / self._installer_asset["name"]
+        url  = self._installer_asset["url"]
+        size = self._installer_asset.get("size", 0)
+
+        self._btn_download.setEnabled(False)
+        self._progress_bar.setRange(0, max(size, 0))
+        self._progress_bar.setValue(0)
+        self._progress_bar.setVisible(True)
+        self._lbl_status.setText(STRINGS["upd_status_downloading"])
+        self._lbl_status.setVisible(True)
+
+        self._download_worker = DownloadWorker(url, dest)
+        self._download_worker.progress.connect(self._on_download_progress)
+        self._download_worker.finished.connect(self._on_download_done)
+        self._download_worker.error.connect(self._on_download_error)
+        self._download_worker.start()
+
+    def _on_download_progress(self, done: int, total: int):
+        if total > 0:
+            self._progress_bar.setRange(0, total)
+            self._progress_bar.setValue(done)
+            mb_done  = done  / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            self._lbl_status.setText(
+                STRINGS["upd_status_progress"].format(
+                    done=f"{mb_done:.1f}", total=f"{mb_total:.1f}"
+                )
+            )
+        else:
+            self._progress_bar.setRange(0, 0)  # indeterminate
+
+    def _on_download_done(self, path_str: str):
+        self._downloaded_path = Path(path_str)
+        self._progress_bar.setRange(0, 1)
+        self._progress_bar.setValue(1)
+
+        # Verify SHA-256 against the digest embedded in the GitHub asset metadata
+        if self._expected_digest:
+            self._lbl_status.setText(STRINGS["upd_status_verifying"])
+            from core.updater import verify_sha256
+            ok, msg = verify_sha256(self._downloaded_path, self._expected_digest)
+            if not ok:
+                try:
+                    self._downloaded_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                self._lbl_status.setText(STRINGS["upd_status_verify_fail"])
+                QMessageBox.critical(
+                    self, STRINGS["upd_dlg_verify_fail_title"],
+                    STRINGS["upd_dlg_verify_fail_text"].format(msg=msg)
+                )
+                self._btn_download.setEnabled(True)
+                return
+
+        self._lbl_status.setText(STRINGS["upd_status_ready"])
+        self._launch_installer()
+
+    def _on_download_error(self, msg: str):
+        self._btn_download.setEnabled(True)
+        self._progress_bar.setVisible(False)
+        self._lbl_status.setText(STRINGS["upd_status_error"])
+        QMessageBox.warning(
+            self, STRINGS["upd_dlg_dl_error_title"],
+            STRINGS["upd_dlg_dl_error_text"].format(msg=msg)
+        )
+
+    def _launch_installer(self):
+        if self._downloaded_path is None:
+            return
+        from core.updater import launch_installer_and_exit
+        err = launch_installer_and_exit(self._downloaded_path)
+        if err:
+            QMessageBox.warning(
+                self, STRINGS["upd_dlg_launch_fail_title"],
+                STRINGS["upd_dlg_launch_fail_text"].format(msg=err)
+            )
+            return
+        # Installer is running — exit SubForge so it can replace files
+        self.accept()
+        from PyQt6.QtWidgets import QApplication as _QApp
+        _QApp.instance().quit()
+
+    def closeEvent(self, event):
+        # Don't allow closing while a download is in progress
+        if self._download_worker and self._download_worker.isRunning():
+            event.ignore()
+        else:
+            super().closeEvent(event)
+
+
+# ---------------------------------------------------------------------------
+# Find & Replace dialog (modeless)
+# ---------------------------------------------------------------------------
+class FindReplaceDialog(QDialog):
+    """Modeless find/replace dialog operating on the Single File block list."""
+
+    def __init__(self, parent: "MainWindow"):
+        super().__init__(parent, Qt.WindowType.Tool)
+        self.setWindowTitle(STRINGS["fr_title"])
+        self.setMinimumWidth(420)
+        self._parent = parent
+        self._match_rows: list[int] = []
+        self._current_match: int = -1
+
+        grid = QGridLayout(self)
+        grid.setSpacing(8)
+        grid.setContentsMargins(12, 12, 12, 12)
+
+        grid.addWidget(QLabel(STRINGS["fr_lbl_find"]), 0, 0)
+        self._find_edit = QLineEdit()
+        self._find_edit.setPlaceholderText(STRINGS["fr_find_placeholder"])
+        grid.addWidget(self._find_edit, 0, 1, 1, 2)
+
+        grid.addWidget(QLabel(STRINGS["fr_lbl_replace"]), 1, 0)
+        self._replace_edit = QLineEdit()
+        self._replace_edit.setPlaceholderText(STRINGS["fr_replace_placeholder"])
+        grid.addWidget(self._replace_edit, 1, 1, 1, 2)
+
+        self._chk_regex = QCheckBox(STRINGS["fr_chk_regex"])
+        self._chk_case  = QCheckBox(STRINGS["fr_chk_case"])
+        grid.addWidget(self._chk_regex, 2, 1)
+        grid.addWidget(self._chk_case,  2, 2)
+
+        self._lbl_status = QLabel("")
+        self._lbl_status.setStyleSheet(f"color: {FG2}; font-size: {_get_fps()}pt;")
+        grid.addWidget(self._lbl_status, 3, 0, 1, 3)
+
+        btn_row = QHBoxLayout()
+        self._btn_find_next    = QPushButton(STRINGS["fr_btn_find_next"])
+        self._btn_replace      = QPushButton(STRINGS["fr_btn_replace"])
+        self._btn_replace_all  = QPushButton(STRINGS["fr_btn_replace_all"])
+        self._btn_replace_all.setObjectName("btn_save_green")
+        btn_close = QPushButton(STRINGS["fr_btn_close"])
+        btn_row.addWidget(self._btn_find_next)
+        btn_row.addWidget(self._btn_replace)
+        btn_row.addWidget(self._btn_replace_all)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+        grid.addLayout(btn_row, 4, 0, 1, 3)
+
+        self._find_edit.textChanged.connect(self._on_find_changed)
+        self._chk_regex.toggled.connect(self._on_find_changed)
+        self._chk_case.toggled.connect(self._on_find_changed)
+        self._btn_find_next.clicked.connect(self._find_next)
+        self._btn_replace.clicked.connect(self._replace_current)
+        self._btn_replace_all.clicked.connect(self._replace_all)
+        btn_close.clicked.connect(self.close)
+        self._find_edit.returnPressed.connect(self._find_next)
+
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    def _make_pattern(self, text: str):
+        """Return a compiled re.Pattern or None if the search text is empty/invalid."""
+        if not text:
+            return None
+        flags = 0 if self._chk_case.isChecked() else re.IGNORECASE
+        try:
+            if self._chk_regex.isChecked():
+                return re.compile(text, flags)
+            else:
+                return re.compile(re.escape(text), flags)
+        except re.error:
+            return None
+
+    def _clear_highlights(self):
+        bl = self._parent._block_list
+        for i in range(bl.count()):
+            item = bl.item(i)
+            item.setBackground(QColor(0, 0, 0, 0))
+        self._match_rows = []
+        self._current_match = -1
+
+    def _highlight_matches(self, pattern):
+        import re as _re
+        self._clear_highlights()
+        if pattern is None:
+            return
+        bl = self._parent._block_list
+        for i in range(bl.count()):
+            item = bl.item(i)
+            if not isinstance(item, BlockRow):
+                continue
+            if pattern.search(item.block.content):
+                item.setBackground(QColor(ACCENT + "44"))
+                self._match_rows.append(i)
+
+    # ── slots ─────────────────────────────────────────────────────────────
+
+    def _on_find_changed(self):
+        pat = self._make_pattern(self._find_edit.text())
+        self._highlight_matches(pat)
+        n = len(self._match_rows)
+        if not self._find_edit.text():
+            self._lbl_status.setText("")
+        elif pat is None:
+            self._lbl_status.setText(STRINGS["fr_status_invalid"])
+        else:
+            self._lbl_status.setText(STRINGS["fr_status_found"].format(n=n))
+        self._current_match = -1
+
+    def _find_next(self):
+        if not self._match_rows:
+            self._on_find_changed()
+            if not self._match_rows:
+                self._lbl_status.setText(STRINGS["fr_status_not_found"])
+                return
+        self._current_match = (self._current_match + 1) % len(self._match_rows)
+        row = self._match_rows[self._current_match]
+        self._parent._block_list.setCurrentRow(row)
+        self._lbl_status.setText(
+            STRINGS["fr_status_match"].format(
+                current=self._current_match + 1, total=len(self._match_rows)
+            )
+        )
+
+    def _replace_current(self):
+        if not self._match_rows:
+            self._find_next()
+            return
+        pat = self._make_pattern(self._find_edit.text())
+        if pat is None:
+            return
+        # Operate on whichever row is currently selected, if it's a match
+        bl = self._parent._block_list
+        row = bl.currentRow()
+        if row not in self._match_rows:
+            self._find_next()
+            return
+        item = bl.item(row)
+        if not isinstance(item, BlockRow):
+            return
+        old_content = item.block.content
+        new_content = pat.sub(self._replace_edit.text(), old_content, count=1)
+        if new_content == old_content:
+            self._find_next()
+            return
+        cmd = TextEditCommand(
+            item=item,
+            old_content=old_content,
+            new_content=new_content,
+            refresh_cb=self._parent._refresh_stats,
+            select_cb=bl.setCurrentRow,
+            row=row,
+        )
+        self._parent._undo_stack.push(cmd)
+        # Refresh highlights after edit
+        self._on_find_changed()
+        self._find_next()
+
+    def _replace_all(self):
+        pat = self._make_pattern(self._find_edit.text())
+        if pat is None:
+            return
+        self._highlight_matches(pat)
+        if not self._match_rows:
+            self._lbl_status.setText(STRINGS["fr_status_not_found"])
+            return
+        bl = self._parent._block_list
+        count = 0
+        # Push each replacement as its own undo command so they can be
+        # individually undone; QUndoStack macro would be nicer but this keeps
+        # the implementation simple and consistent with Replace & Next.
+        for row in list(self._match_rows):
+            item = bl.item(row)
+            if not isinstance(item, BlockRow):
+                continue
+            old_content = item.block.content
+            new_content = pat.sub(self._replace_edit.text(), old_content)
+            if new_content == old_content:
+                continue
+            cmd = TextEditCommand(
+                item=item,
+                old_content=old_content,
+                new_content=new_content,
+                refresh_cb=self._parent._refresh_stats,
+                select_cb=bl.setCurrentRow,
+                row=row,
+            )
+            self._parent._undo_stack.push(cmd)
+            count += 1
+        self._on_find_changed()
+        self._lbl_status.setText(STRINGS["fr_status_replaced"].format(n=count))
+
+    def closeEvent(self, event):
+        self._clear_highlights()
+        super().closeEvent(event)
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +1076,9 @@ class MainWindow(QMainWindow):
         self._subtitle: Optional[ParsedSubtitle] = None
         self._worker: Optional[AnalyzeWorker] = None
         self._file_queue: List[Path] = []
+        self._undo_stack = QUndoStack(self)
+        self._find_replace_dlg: Optional[FindReplaceDialog] = None
+        self._sync_worker = None
 
         self._build_ui()
         self._connect_signals()
@@ -823,10 +1397,19 @@ class MainWindow(QMainWindow):
         self._btn_stretch = QPushButton(STRINGS["sf_btn_stretch"])
         self._btn_stretch.setToolTip(STRINGS["tip_sf_stretch"])
         self._btn_stretch.setEnabled(False)
+        self._btn_find_replace = QPushButton(STRINGS["sf_btn_find_replace"])
+        self._btn_find_replace.setToolTip(STRINGS["tip_sf_find_replace"])
+        self._btn_find_replace.setEnabled(False)
+        self._btn_sync_audio = QPushButton(STRINGS["sf_btn_sync_audio"])
+        self._btn_sync_audio.setToolTip(STRINGS["tip_sf_sync_audio"])
+        self._btn_sync_audio.setEnabled(False)
+        self._btn_sync_audio.setVisible(FFSUBSYNC_AVAILABLE)
         action_bar.addWidget(self._btn_prev)
         action_bar.addWidget(self._btn_next)
         action_bar.addWidget(self._btn_shift)
         action_bar.addWidget(self._btn_stretch)
+        action_bar.addWidget(self._btn_find_replace)
+        action_bar.addWidget(self._btn_sync_audio)
         action_bar.addStretch()
         action_bar.addWidget(self._lbl_stats)
         action_bar.addWidget(self._btn_clean_all)
@@ -900,6 +1483,8 @@ class MainWindow(QMainWindow):
         self._btn_clean_all.clicked.connect(self._save_current)
         self._btn_shift.clicked.connect(self._shift_dialog)
         self._btn_stretch.clicked.connect(self._stretch_dialog)
+        self._btn_find_replace.clicked.connect(self._open_find_replace)
+        self._btn_sync_audio.clicked.connect(self._sync_to_audio)
         self._btn_open_folder.clicked.connect(self._open_folder)
         self._btn_prev.clicked.connect(self._prev_file)
         self._btn_next.clicked.connect(self._next_file)
@@ -930,6 +1515,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Delete"), self, self._mark_current_as_ad)
         QShortcut(QKeySequence("Space"),  self, self._keep_current)
         QShortcut(QKeySequence("Ctrl+S"), self, self._save_current)
+        QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_action)
+        QShortcut(QKeySequence("Ctrl+Y"), self, self._redo_action)
+        QShortcut(QKeySequence("Ctrl+H"), self, self._open_find_replace)
 
     # ── Status bar unification ────────────────────────────────────────────
 
@@ -1184,11 +1772,16 @@ class MainWindow(QMainWindow):
         self._btn_clean_all.setEnabled(False)
         self._btn_shift.setEnabled(False)
         self._btn_stretch.setEnabled(False)
+        self._btn_find_replace.setEnabled(False)
+        self._btn_sync_audio.setEnabled(False)
         self._last_shift_offset = 0
         self._original_timestamps = []
         self._lbl_file.setText(f"Loading {path.name}…")
         self._progress.setVisible(True)
         self._progress.setRange(0, 0)  # indeterminate
+        self._undo_stack.clear()
+        if hasattr(self, '_find_replace_dlg') and self._find_replace_dlg is not None:
+            self._find_replace_dlg._clear_highlights()
 
         if self._worker and self._worker.isRunning():
             self._worker.quit()
@@ -1230,6 +1823,8 @@ class MainWindow(QMainWindow):
         self._btn_clean_all.setEnabled(True)
         self._btn_shift.setEnabled(True)
         self._btn_stretch.setEnabled(True)
+        self._btn_find_replace.setEnabled(True)
+        self._btn_sync_audio.setEnabled(True)
         status_parts = [f"{ads} ad block(s) found, {warns} warning(s)"]
         if opts:
             status_parts.append(f"{opts} opt(s)")
@@ -1323,10 +1918,19 @@ class MainWindow(QMainWindow):
             return
         item = self._block_list.item(row)
         if isinstance(item, BlockRow):
-            item.block.regex_matches = 3   # forces is_ad = True (computed property)
-            item._update_display()
-            self._refresh_stats()
-            self._block_list.setCurrentRow(min(row + 1, self._block_list.count() - 1))
+            next_row = min(row + 1, self._block_list.count() - 1)
+            cmd = BlockStateCommand(
+                item=item,
+                old_matches=item.block.regex_matches,
+                old_score=item.block.ad_score,
+                new_matches=3,
+                new_score=item.block.ad_score,
+                description=STRINGS["undo_mark_ad"],
+                refresh_cb=self._refresh_stats,
+                select_cb=self._block_list.setCurrentRow,
+                row=next_row,
+            )
+            self._undo_stack.push(cmd)
 
     def _keep_current(self):
         row = self._block_list.currentRow()
@@ -1334,11 +1938,19 @@ class MainWindow(QMainWindow):
             return
         item = self._block_list.item(row)
         if isinstance(item, BlockRow):
-            item.block.regex_matches = -1  # forces is_ad=False, is_warning=False
-            item.block.ad_score = 0.0
-            item._update_display()
-            self._refresh_stats()
-            self._block_list.setCurrentRow(min(row + 1, self._block_list.count() - 1))
+            next_row = min(row + 1, self._block_list.count() - 1)
+            cmd = BlockStateCommand(
+                item=item,
+                old_matches=item.block.regex_matches,
+                old_score=item.block.ad_score,
+                new_matches=-1,
+                new_score=0.0,
+                description=STRINGS["undo_keep_block"],
+                refresh_cb=self._refresh_stats,
+                select_cb=self._block_list.setCurrentRow,
+                row=next_row,
+            )
+            self._undo_stack.push(cmd)
 
     def _refresh_stats(self):
         if not self._subtitle:
@@ -1359,6 +1971,94 @@ class MainWindow(QMainWindow):
         if opts:
             parts.append(f"<font color='{ACCENT}'>{opts} opts</font>")
         self._lbl_stats.setText("  ".join(parts))
+
+    # ── Undo / Redo ───────────────────────────────────────────────────────
+
+    def _undo_action(self):
+        if self._undo_stack.canUndo():
+            action_text = self._undo_stack.undoText()
+            self._undo_stack.undo()
+            self._status.showMessage(
+                STRINGS["msg_undone"].format(action=action_text)
+            )
+
+    def _redo_action(self):
+        if self._undo_stack.canRedo():
+            action_text = self._undo_stack.redoText()
+            self._undo_stack.redo()
+            self._status.showMessage(
+                STRINGS["msg_redone"].format(action=action_text)
+            )
+
+    def _open_find_replace(self):
+        if self._subtitle is None:
+            return
+        if self._find_replace_dlg is None or not self._find_replace_dlg.isVisible():
+            self._find_replace_dlg = FindReplaceDialog(self)
+        self._find_replace_dlg.show()
+        self._find_replace_dlg.raise_()
+        self._find_replace_dlg.activateWindow()
+        self._find_replace_dlg._find_edit.setFocus()
+
+    # ── Audio sync (ffsubsync) ────────────────────────────────────────────
+
+    def _sync_to_audio(self):
+        if self._subtitle is None:
+            return
+        sub_path = self._subtitle.path
+
+        # Auto-detect a paired video file next to the subtitle
+        video_path: Optional[Path] = None
+        for ext in sorted(VIDEO_EXTENSIONS):
+            candidate = sub_path.with_suffix(ext)
+            if candidate.exists():
+                video_path = candidate
+                break
+
+        if video_path is None:
+            # Ask the user to pick one
+            from core import VIDEO_EXTENSIONS as _VE
+            exts = " ".join(f"*{e}" for e in sorted(_VE))
+            picked, _ = QFileDialog.getOpenFileName(
+                self,
+                STRINGS["sync_dlg_pick_video"],
+                str(sub_path.parent),
+                f"Video Files ({exts});;All Files (*)",
+            )
+            if not picked:
+                return
+            video_path = Path(picked)
+
+        output_path = sub_path.with_stem(sub_path.stem + ".synced")
+        self._status.showMessage(STRINGS["sync_status_running"])
+        self._btn_sync_audio.setEnabled(False)
+
+        self._sync_worker = AudioSyncWorker(sub_path, video_path, output_path)
+        self._sync_worker.finished.connect(self._on_sync_done)
+        self._sync_worker.error.connect(self._on_sync_error)
+        self._sync_worker.start()
+
+    def _on_sync_done(self, out_path: str):
+        self._btn_sync_audio.setEnabled(True)
+        p = Path(out_path)
+        self._status.showMessage(STRINGS["sync_status_done"].format(name=p.name))
+        answer = QMessageBox.question(
+            self,
+            STRINGS["sync_dlg_done_title"],
+            STRINGS["sync_dlg_done_text"].format(name=p.name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._enqueue_files([p])
+
+    def _on_sync_error(self, msg: str):
+        self._btn_sync_audio.setEnabled(True)
+        self._status.showMessage(STRINGS["sync_status_error"])
+        QMessageBox.warning(
+            self,
+            STRINGS["sync_dlg_error_title"],
+            STRINGS["sync_dlg_error_text"].format(msg=msg),
+        )
 
     # ── Save ──────────────────────────────────────────────────────────────
 
@@ -1783,7 +2483,6 @@ class MainWindow(QMainWindow):
     # ── Update check ─────────────────────────────────────────────────────────
 
     def _check_for_updates(self):
-        from core.updater import CURRENT_VERSION, RELEASES_URL, is_newer
         self._btn_check_updates.setEnabled(False)
         self._btn_check_updates.setText(STRINGS["app_btn_checking"])
         self._status.showMessage(STRINGS["msg_checking_updates"])
@@ -1794,28 +2493,23 @@ class MainWindow(QMainWindow):
         self._update_worker.start()
 
     def _on_update_result(self, tag: str, name: str):
-        from core.updater import CURRENT_VERSION, RELEASES_URL, is_newer
+        from core.updater import CURRENT_VERSION, is_newer
         self._btn_check_updates.setEnabled(True)
         self._btn_check_updates.setText(STRINGS["app_btn_check_updates"])
 
         if is_newer(tag, CURRENT_VERSION):
-            msg = (
-                "A new version of SubForge is available.\n\n"
-                f"Current version:  {CURRENT_VERSION}\n"
-                f"Latest version:   {tag}  ({name})\n\n"
-                "Visit the releases page to download the update."
-            )
-            answer = QMessageBox.information(
-                self,
-                STRINGS["dlg_update_available"],
-                msg,
-                QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Close,
-            )
-            if answer == QMessageBox.StandardButton.Open:
-                import webbrowser
-                webbrowser.open(RELEASES_URL)
+            self._status.showMessage(STRINGS["upd_status_fetching_details"])
+            # Fetch full release details (assets + body) for the download dialog
+            from core.updater import fetch_release_details
+            release, err = fetch_release_details()
+            if err or release is None:
+                # Fall back to simple browser prompt if detail fetch fails
+                release = {"tag_name": tag, "name": name, "body": "", "assets": []}
+            dlg = UpdateAvailableDialog(self, release)
+            dlg.exec()
             self._status.showMessage(f"Update available: {tag}")
         else:
+            from core.updater import CURRENT_VERSION
             QMessageBox.information(
                 self,
                 STRINGS["dlg_up_to_date_title"],
